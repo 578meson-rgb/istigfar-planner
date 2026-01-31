@@ -1,76 +1,87 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 interface CounterProps {
-  initialCount: number;
+  count: number;
   onCountChange: (newCount: number) => void;
+  labels: {
+    recite: string;
+    reset: string;
+    adjust: string;
+  };
 }
 
-const Counter: React.FC<CounterProps> = ({ initialCount, onCountChange }) => {
-  const [count, setCount] = useState(initialCount);
+const Counter: React.FC<CounterProps> = ({ count, onCountChange, labels }) => {
   const [pulse, setPulse] = useState(false);
 
-  useEffect(() => {
-    setCount(initialCount);
-  }, [initialCount]);
-
   const handleIncrement = () => {
-    const next = count + 1;
-    setCount(next);
-    onCountChange(next);
+    onCountChange(count + 1);
     setPulse(true);
-    setTimeout(() => setPulse(false), 100);
-    if ('vibrate' in navigator) navigator.vibrate(25);
+    setTimeout(() => setPulse(false), 120);
+    if ('vibrate' in navigator) navigator.vibrate(10);
+  };
+
+  const handleReset = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Using a more non-blocking approach if needed, but confirm is standard
+    if (window.confirm(labels.reset + "?")) {
+      onCountChange(0);
+    }
+  };
+
+  const handleAdjust = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const v = window.prompt(labels.adjust + ":", count.toString());
+    if (v !== null) {
+      const n = parseInt(v);
+      if (!isNaN(n) && n >= 0) {
+        onCountChange(n);
+      }
+    }
   };
 
   return (
-    <div className="flex flex-col items-center space-y-20 py-16">
+    <div className="flex flex-col items-center space-y-12">
       <div 
         onClick={handleIncrement}
         className={`
-          relative w-80 h-80 rounded-full flex items-center justify-center 
-          cursor-pointer select-none transition-all duration-200 active:scale-90
-          shadow-[0_50px_100px_-20px_rgba(0,0,0,0.6),inset_0_2px_4px_rgba(255,255,255,0.1)]
-          ${pulse ? 'bg-emerald-500 shadow-emerald-500/50 scale-105' : 'bg-[#0a0f0d]'}
+          relative w-64 h-64 rounded-full flex items-center justify-center 
+          cursor-pointer select-none transition-all duration-150 active:scale-90
+          shadow-[0_45px_100px_-25px_rgba(1,22,30,0.25),inset_0_-8px_20px_rgba(0,0,0,0.15),inset_0_4px_10px_rgba(255,255,255,0.2)]
+          ${pulse ? 'bg-gradient-to-tr from-[#064e3b] to-[#10b981] scale-105' : 'bg-gradient-to-tr from-[#065f46] to-[#059669]'}
           group
         `}
       >
-        {/* Outer Halo Rings */}
-        <div className="absolute inset-[-20px] rounded-full border border-emerald-500/10 scale-110 opacity-30"></div>
-        <div className="absolute inset-[-40px] rounded-full border border-emerald-500/5 scale-120 opacity-20"></div>
-
-        {/* Gloss Layer */}
-        <div className="absolute inset-2 rounded-full bg-gradient-to-br from-white/10 to-transparent opacity-50"></div>
+        {/* Shine Overlay */}
+        <div className="absolute top-4 left-1/4 w-1/2 h-1/4 bg-gradient-to-b from-white/10 to-transparent rounded-full blur-lg"></div>
         
-        {/* Center Display */}
+        {/* Number Display */}
         <div className="text-center relative z-20 pointer-events-none">
-          <span className="block text-emerald-100/20 text-[9px] font-black tracking-[0.8em] uppercase mb-4">RECITE</span>
-          <span className={`text-9xl font-black tabular-nums cinzel transition-colors duration-300 ${pulse ? 'text-white' : 'text-emerald-50'}`}>
+          <span className={`block text-[11px] font-black font-outfit tracking-[0.4em] uppercase mb-4 transition-opacity ${pulse ? 'opacity-50' : 'opacity-30'} text-white`}>
+            {labels.recite}
+          </span>
+          <span className={`text-8xl font-black tabular-nums font-outfit tracking-tighter transition-colors duration-300 text-white`}>
             {count}
           </span>
         </div>
-
-        {/* Dynamic Inner Glow */}
-        <div className={`absolute inset-0 rounded-full bg-emerald-500 blur-3xl transition-opacity duration-300 pointer-events-none ${pulse ? 'opacity-40' : 'opacity-0'}`}></div>
       </div>
 
-      <div className="flex space-x-20 items-center opacity-20 group">
+      {/* Bottom Controls */}
+      <div className="flex space-x-12 items-center opacity-40 hover:opacity-100 transition-all duration-500">
         <button 
-          onClick={(e) => { e.stopPropagation(); if(confirm("Reset progress?")) { setCount(0); onCountChange(0); }}}
-          className="text-[10px] font-black uppercase tracking-[0.4em] hover:opacity-100 hover:text-red-500 transition-all hover:scale-110"
+          onClick={handleReset}
+          className="text-[11px] font-black uppercase tracking-widest font-outfit hover:text-red-600 text-[#01161e] transition-colors"
         >
-          Reset
+          {labels.reset}
         </button>
-        <div className="w-2 h-2 rounded-full bg-emerald-500/40"></div>
+        <div className="w-1.5 h-1.5 rounded-full bg-[#124559] opacity-30"></div>
         <button 
-          onClick={(e) => { e.stopPropagation(); const v = prompt("Adjust count:", count.toString()); if(v) { setCount(parseInt(v)); onCountChange(parseInt(v)); }}}
-          className="text-[10px] font-black uppercase tracking-[0.4em] hover:opacity-100 hover:text-emerald-500 transition-all hover:scale-110"
+          onClick={handleAdjust}
+          className="text-[11px] font-black uppercase tracking-widest font-outfit hover:text-[#059669] text-[#01161e] transition-colors"
         >
-          Adjust
+          {labels.adjust}
         </button>
       </div>
-      
-      <p className="text-[10px] font-black uppercase tracking-[0.8em] opacity-10 animate-pulse text-glow">Surrender to the Flow</p>
     </div>
   );
 };

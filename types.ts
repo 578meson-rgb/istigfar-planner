@@ -17,6 +17,7 @@ export interface PlannedTarget {
 
 export type Theme = 'light' | 'dark';
 export type View = 'home' | 'analytics' | 'planner';
+export type Language = 'en' | 'bn';
 
 export interface AppState {
   logs: LogEntry[];
@@ -26,6 +27,7 @@ export interface AppState {
   dailyContent: DailyContent | null;
   isLoadingContent: boolean;
   theme: Theme;
+  language: Language;
   currentView: View;
   error: string | null;
 }

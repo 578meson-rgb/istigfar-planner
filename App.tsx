@@ -1,136 +1,242 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { AppState, LogEntry, Theme, View, PlannedTarget } from './types';
-import { fetchDailyContent } from './services/geminiService';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { AppState, LogEntry, Theme, View, PlannedTarget, Language } from './types';
+import { fetchDailyContent, LocalizedDailyContent } from './services/geminiService';
 import Counter from './components/Counter';
 import HistoryChart from './components/HistoryChart';
 
-const STORAGE_KEY = 'istighfar_tracker_premium_v5';
+const STORAGE_KEY = 'istigfar_tracker_v18_reverted';
+
+const translations = {
+  en: {
+    appName: "Istigfar Tracker",
+    progressToday: "Progress Today",
+    setTarget: "Set Target",
+    roadmap: "Roadmap",
+    insights: "Insights",
+    streak: "Streak",
+    days: "Days",
+    achieved: "Achieved",
+    history: "Recent History",
+    tomorrow: "Tomorrow",
+    target: "Target",
+    set: "Set",
+    cancel: "Cancel",
+    benefits: "Spiritual Reflection",
+    benefit1: "Door to Mercy: Constant remembrance clears the path to tranquility.",
+    benefit2: "Inner Peace: It lifts the weights of the past from your heart.",
+    benefit3: "Abundance: Forgiveness is the key to spiritual and worldly growth.",
+    rewards: "Rewards of Istighfar",
+    reward1: "Allah grants relief from every worry.",
+    reward2: "A way out of every hardship.",
+    reward3: "Sustenance from where one does not expect.",
+    reward4: "The pleasure and love of the Creator.",
+    reward5: "Purification of the soul from mistakes.",
+    madeBy: "Made by Adnan Khan",
+    recite: "Recite",
+    reset: "Reset",
+    adjust: "Adjust",
+    navHome: "Home",
+    navPlanner: "Planner",
+    navInsights: "Insights",
+    plannerTitle: "Plan Your Journey",
+    selectDate: "Select a date to set target"
+  },
+  bn: {
+    appName: "ইস্তিগফার ট্র্যাকার",
+    progressToday: "আজকের অগ্রগতি",
+    setTarget: "লক্ষ্য নির্ধারণ",
+    roadmap: "পরিকল্পনা",
+    insights: "পরিসংখ্যান",
+    streak: "ধারাবাহিকতা",
+    days: "দিন",
+    achieved: "অর্জিত",
+    history: "সাম্প্রতিক ইতিহাস",
+    tomorrow: "আগামীকাল",
+    target: "লক্ষ্য",
+    set: "সেট",
+    cancel: "বাতিল",
+    benefits: "আধ্যাত্মিক প্রতিফলন",
+    benefit1: "রহমতের দুয়ার: ক্রমাগত ক্ষমা প্রার্থনা প্রশান্তির পথ প্রশস্ত করে।",
+    benefit2: "অন্তরের শান্তি: এটি আপনার হৃদয় থেকে অতীতের বোঝা সরিয়ে দেয়।",
+    benefit3: "বরকত: ক্ষমা প্রার্থনা আধ্যাত্মিক ও পার্থিব উন্নতির চাবিকাঠি।",
+    rewards: "ইস্তিগফারের সওয়াব",
+    reward1: "আল্লাহ সকল দুশ্চিন্তা থেকে মুক্তি দেন।",
+    reward2: "প্রতিটি কঠিন পরিস্থিতি থেকে উত্তরণের পথ।",
+    reward3: "অপ্রত্যাশিত উৎস থেকে রিজিক দান।",
+    reward4: "সৃষ্টিকর্তার সন্তুষ্টি ও ভালোবাসা।",
+    reward5: "ভুলভ্রান্তি থেকে আত্মার পরিশুদ্ধি।",
+    madeBy: "আদনান খান দ্বারা তৈরি",
+    recite: "পাঠ করুন",
+    reset: "রিসেট",
+    adjust: "সমন্বয়",
+    navHome: "হোম",
+    navPlanner: "পরিকল্পক",
+    navInsights: "পরিসংখ্যান",
+    plannerTitle: "আপনার যাত্রা পরিকল্পনা করুন",
+    selectDate: "লক্ষ্য নির্ধারণ করতে একটি তারিখ নির্বাচন করুন"
+  }
+};
 
 const App: React.FC = () => {
-  const [state, setState] = useState<AppState>({
+  const [state, setState] = useState<AppState & { localizedContent: LocalizedDailyContent | null }>({
     logs: [],
     plannedTargets: [],
     todayCount: 0,
     todayTarget: null,
     dailyContent: null,
+    localizedContent: null,
     isLoadingContent: true,
     theme: 'light',
+    language: 'en',
     currentView: 'home',
     error: null,
   });
 
   const [showTargetModal, setShowTargetModal] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [targetInput, setTargetInput] = useState('');
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [calendarViewDate, setCalendarViewDate] = useState(new Date());
+
+  const t = translations[state.language];
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const prevCountRef = useRef<number>(0);
 
   const getTodayStr = () => new Date().toISOString().split('T')[0];
 
-  const upcomingDays = useMemo(() => {
-    const days = [];
-    for (let i = 1; i <= 7; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      days.push(d.toISOString().split('T')[0]);
+  const playPing = useCallback(() => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioContextRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.5);
+
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch (e) {
+      console.warn("Audio playback failed", e);
     }
-    return days;
   }, []);
 
-  // Initial Load
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     const today = getTodayStr();
     let initialLogs: LogEntry[] = [];
     let initialPlanned: PlannedTarget[] = [];
-    let initialTheme: Theme = 'light';
+    let initialLang: Language = 'en';
 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         initialLogs = parsed.logs || [];
         initialPlanned = parsed.plannedTargets || [];
-        initialTheme = parsed.theme || 'light';
+        initialLang = parsed.language || 'en';
       } catch (e) { console.error(e); }
     }
 
     const todayLog = initialLogs.find(l => l.date === today);
     const plannedForToday = initialPlanned.find(p => p.date === today);
-    
-    // Logic: 1. Existing log, 2. Planned target, 3. Auto-increment
-    const autoTarget = 100 + (initialLogs.length * 50);
-    const resolvedTarget = todayLog ? todayLog.target : (plannedForToday ? plannedForToday.target : autoTarget);
+    const resolvedTarget = todayLog ? todayLog.target : (plannedForToday ? plannedForToday.target : 100);
 
     setState(prev => ({
       ...prev,
       logs: initialLogs,
       plannedTargets: initialPlanned,
-      theme: initialTheme,
+      language: initialLang,
       todayCount: todayLog ? todayLog.count : 0,
       todayTarget: resolvedTarget,
     }));
 
-    document.documentElement.classList.toggle('dark', initialTheme === 'dark');
-
     const initializeDaily = async () => {
       setState(prev => ({ ...prev, isLoadingContent: true }));
       const content = await fetchDailyContent();
-      setState(prev => ({ ...prev, dailyContent: content, isLoadingContent: false }));
+      setState(prev => ({ 
+        ...prev, 
+        localizedContent: content,
+        dailyContent: content[prev.language],
+        isLoadingContent: false 
+      }));
     };
     initializeDaily();
   }, []);
 
-  // Persistent Save
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       logs: state.logs,
       plannedTargets: state.plannedTargets,
-      theme: state.theme
+      theme: 'light',
+      language: state.language
     }));
-    document.documentElement.classList.toggle('dark', state.theme === 'dark');
-  }, [state.logs, state.theme, state.plannedTargets]);
+  }, [state.logs, state.plannedTargets, state.language]);
 
-  const toggleTheme = () => {
-    setState(prev => ({ ...prev, theme: prev.theme === 'light' ? 'dark' : 'light' }));
-  };
+  useEffect(() => {
+    if (state.localizedContent) {
+      setState(prev => ({ ...prev, dailyContent: prev.localizedContent![prev.language] }));
+    }
+  }, [state.language, state.localizedContent]);
 
-  const updateCount = useCallback((newCount: number) => {
+  // Sync today's count to logs
+  useEffect(() => {
     const today = getTodayStr();
     setState(prev => {
       const logs = [...prev.logs];
       const idx = logs.findIndex(l => l.date === today);
       const target = prev.todayTarget || 100;
-
       if (idx > -1) {
-        logs[idx].count = newCount;
+        logs[idx].count = prev.todayCount;
+        logs[idx].target = target;
       } else {
-        logs.push({ date: today, count: newCount, target });
+        logs.push({ date: today, count: prev.todayCount, target });
       }
-      return { ...prev, todayCount: newCount, logs };
+      return { ...prev, logs };
     });
-  }, [state.todayTarget]);
+  }, [state.todayCount, state.todayTarget]);
 
-  const setPlanningTarget = (date: string, value: string) => {
-    const num = parseInt(value);
-    if (!isNaN(num) && num >= 0) {
-      setState(prev => {
-        const planned = [...prev.plannedTargets];
-        const idx = planned.findIndex(p => p.date === date);
-        if (idx > -1) planned[idx].target = num;
-        else planned.push({ date, target: num });
-        return { ...prev, plannedTargets: planned };
-      });
+  // Ping sound logic
+  useEffect(() => {
+    if (state.todayTarget !== null && state.todayCount >= state.todayTarget && prevCountRef.current < state.todayTarget) {
+      playPing();
     }
+    prevCountRef.current = state.todayCount;
+  }, [state.todayCount, state.todayTarget, playPing]);
+
+  const updateCount = (newCount: number) => {
+    setState(prev => ({ ...prev, todayCount: newCount }));
   };
 
   const handleSetTarget = () => {
     const num = parseInt(targetInput);
-    if (!isNaN(num) && num > 0) {
+    if (!isNaN(num) && num >= 0) {
       const today = getTodayStr();
       setState(prev => {
-        const logs = [...prev.logs];
-        const idx = logs.findIndex(l => l.date === today);
-        if (idx > -1) logs[idx].target = num;
-        else logs.push({ date: today, count: prev.todayCount, target: num });
-        return { ...prev, todayTarget: num, logs };
+        const updatedPlanned = [...prev.plannedTargets];
+        const idx = updatedPlanned.findIndex(p => p.date === selectedDate);
+        if (idx > -1) updatedPlanned[idx].target = num;
+        else updatedPlanned.push({ date: selectedDate, target: num });
+
+        let newTodayTarget = prev.todayTarget;
+        if (selectedDate === today) {
+          newTodayTarget = num;
+        }
+        
+        return { ...prev, todayTarget: newTodayTarget, plannedTargets: updatedPlanned };
       });
       setShowTargetModal(false);
       setTargetInput('');
@@ -142,213 +248,324 @@ const App: React.FC = () => {
     const sorted = [...state.logs].sort((a, b) => b.date.localeCompare(a.date));
     let streak = 0;
     const today = getTodayStr();
-    if (sorted[0].date !== today && sorted[0].date !== new Date(Date.now() - 86400000).toISOString().split('T')[0]) return 0;
-    for (let i = 0; i < sorted.length; i++) { streak++; if (i < sorted.length - 1) {
-      const diff = (new Date(sorted[i].date).getTime() - new Date(sorted[i+1].date).getTime()) / 86400000;
-      if (diff > 1.2) break;
-    }}
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    if (sorted[0].date !== today && sorted[0].date !== yesterday) return 0;
+    for (let i = 0; i < sorted.length; i++) {
+      if (sorted[i].count > 0) {
+        streak++;
+        if (i < sorted.length - 1) {
+          const d1 = new Date(sorted[i].date);
+          const d2 = new Date(sorted[i+1].date);
+          const diff = (d1.getTime() - d2.getTime()) / 86400000;
+          if (diff > 1.2) break;
+        }
+      } else if (sorted[i].date !== today) {
+        break;
+      }
+    }
     return streak;
   }, [state.logs]);
 
   const progressPercent = Math.min(100, (state.todayCount / (state.todayTarget || 1)) * 100);
 
+  const Logo = () => (
+    <div className="relative w-9 h-9 flex items-center justify-center">
+      <div className="absolute inset-0 bg-[#7af0bb] rounded-full blur-[2px] opacity-30"></div>
+      <div className="absolute inset-1.5 bg-[#124559] rounded-full shadow-lg border border-black/5"></div>
+      <div className="absolute w-1.5 h-1.5 bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.4)]"></div>
+    </div>
+  );
+
+  const calendarDays = useMemo(() => {
+    const year = calendarViewDate.getFullYear();
+    const month = calendarViewDate.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const days = [];
+    for (let i = 0; i < firstDay; i++) days.push(null);
+    for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i).toISOString().split('T')[0]);
+    return days;
+  }, [calendarViewDate]);
+
+  const changeMonth = (offset: number) => {
+    const newDate = new Date(calendarViewDate);
+    newDate.setMonth(newDate.getMonth() + offset);
+    setCalendarViewDate(newDate);
+  };
+
   return (
-    <div className={`min-h-screen transition-all duration-1000 pb-40 px-6 
-      ${state.theme === 'dark' ? 'bg-[#020504] text-[#e8f3ee]' : 'bg-[#faf9f6] text-[#2d3a35]'}`}>
+    <div className={`min-h-screen pb-48 px-6 overflow-x-hidden flex flex-col bg-[#eff6e0] text-[#01161e] ${state.language === 'bn' ? 'font-bangla' : 'font-jakarta'}`}>
       
-      {/* Dynamic Header */}
-      <header className="max-w-xl mx-auto pt-16 pb-12 flex items-center justify-between">
-        <div className="flex items-center space-x-5">
-          <div className="w-16 h-16 bg-gradient-to-br from-[#064e3b] to-[#10b981] rounded-[2rem] shadow-2xl shadow-emerald-900/40 flex items-center justify-center transform rotate-6 active:rotate-0 transition-transform duration-500">
-            <span className="cinzel text-white text-3xl font-black -rotate-6">I</span>
-          </div>
-          <div>
-            <h1 className="text-3xl font-black cinzel tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-emerald-600 to-emerald-400 dark:from-emerald-400 dark:to-emerald-100">ISTIGHFAR</h1>
-            <p className="text-[10px] font-black uppercase tracking-[0.4em] opacity-40">The Divine Companion</p>
+      {/* Sidebar Overlay */}
+      <div 
+        className={`fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[100] transition-opacity duration-300 ${showSidebar ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={() => setShowSidebar(false)}
+      ></div>
+
+      {/* Sidebar */}
+      <aside className={`fixed top-0 left-0 h-full w-72 bg-white/95 backdrop-blur-xl z-[101] p-8 transition-transform duration-500 transform border-r border-black/5 shadow-2xl ${showSidebar ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex justify-between items-center mb-10">
+          <h2 className="text-xl font-outfit font-black tracking-tight text-[#124559] uppercase">{t.rewards}</h2>
+          <button onClick={() => setShowSidebar(false)} className="p-2 -mr-2 opacity-60 hover:opacity-100 transition-opacity text-[#01161e]">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="space-y-6">
+          {[t.reward1, t.reward2, t.reward3, t.reward4, t.reward5].map((reward, i) => (
+            <div key={i} className="flex space-x-4 animate-in slide-in-from-left duration-300" style={{ animationDelay: `${i * 100}ms` }}>
+               <div className="w-2.5 h-2.5 rounded-full bg-[#10b981] mt-1.5 flex-shrink-0 shadow-sm"></div>
+               <p className="text-[14px] text-[#01161e] font-bold leading-relaxed">{reward}</p>
+            </div>
+          ))}
+        </div>
+      </aside>
+      
+      {/* Header */}
+      <header className="max-w-xl w-full mx-auto pt-8 pb-4 flex items-center justify-between relative z-10">
+        <div className="flex items-center space-x-3">
+          <button 
+            onClick={() => setShowSidebar(true)}
+            className="p-2.5 -ml-2 rounded-2xl bg-white shadow-sm border border-black/5 hover:bg-black/5 transition-colors"
+          >
+            <svg className="w-6 h-6 text-[#124559]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" /></svg>
+          </button>
+          <div className="flex items-center space-x-3">
+            <Logo />
+            <h1 className="text-lg sm:text-xl font-outfit font-black tracking-tight text-[#124559]">{t.appName}</h1>
           </div>
         </div>
-        <button onClick={toggleTheme} className="p-4 rounded-3xl glass hover:scale-110 active:scale-90 transition-all">
-          {state.theme === 'light' ? (
-            <svg className="w-6 h-6 text-emerald-800" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
-          ) : (
-            <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 9H3m3.343-5.657l-.707.707m12.728 12.728l-.707.707M6.343 17.657l-.707-.707M17.657 6.343l-.707-.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-          )}
-        </button>
+        <div className="flex items-center space-x-2">
+          <button 
+            onClick={() => setState(s => ({ ...s, language: s.language === 'en' ? 'bn' : 'en' }))}
+            className="px-5 py-2.5 rounded-2xl bg-white shadow-sm border border-black/5 text-[11px] font-black uppercase tracking-widest transition-all hover:bg-black/5 text-[#124559]"
+          >
+            {state.language === 'en' ? 'BN' : 'EN'}
+          </button>
+        </div>
       </header>
 
-      <main className="max-w-xl mx-auto space-y-12">
+      {/* Main Content */}
+      <main className="max-w-xl w-full mx-auto flex-grow flex flex-col">
         {state.currentView === 'home' && (
-          <div className="space-y-12 animate-in fade-in duration-1000">
-            {/* Wisdom Reveal */}
-            <section className={`rounded-[3.5rem] p-12 shadow-2xl transition-all duration-700 border
-              ${state.theme === 'dark' ? 'bg-[#05110c] border-emerald-900/20 shadow-emerald-950/50' : 'bg-white border-stone-100 shadow-stone-200/50'}`}>
-              <div className="space-y-10 relative">
-                <div className="flex items-center space-x-3 opacity-30">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                  <span className="text-[10px] font-black uppercase tracking-[0.5em]">Celestial Wisdom</span>
-                </div>
-                {state.isLoadingContent ? (
-                  <div className="animate-pulse space-y-4">
-                    <div className="h-8 bg-emerald-900/10 rounded-2xl w-full"></div>
-                    <div className="h-8 bg-emerald-900/10 rounded-2xl w-2/3"></div>
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-3xl leading-snug serif italic font-medium tracking-tight">"{state.dailyContent?.motivation}"</p>
-                    <div className="flex items-center justify-between pt-10 border-t border-emerald-500/10">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500 shadow-inner">
-                          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 1L9 9H1l7 5-2 9 6-5 6 5-2-9 7-5h-8l-3-8z"/></svg>
-                        </div>
-                        <p className="text-sm font-bold tracking-tight opacity-70">Goal: {state.dailyContent?.challenge}</p>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </section>
+          <div className="flex flex-col items-center flex-grow animate-in fade-in duration-1000">
+            {/* Daily Motivation */}
+            <div className="w-full max-w-xs text-center py-6 min-h-[70px] flex items-center justify-center">
+              {state.isLoadingContent ? (
+                <div className="h-3 bg-black/5 rounded-full animate-pulse w-3/4"></div>
+              ) : (
+                <p className="text-[14px] leading-relaxed italic font-black px-4 text-black text-balance">
+                  {state.dailyContent?.motivation}
+                </p>
+              )}
+            </div>
 
-            {/* Live Progress HUD */}
-            <div className="px-6 space-y-8">
-              <div className="flex justify-between items-center">
+            {/* Central Counter */}
+            <div className="relative py-2">
+              <Counter 
+                count={state.todayCount} 
+                onCountChange={updateCount} 
+                labels={{ recite: t.recite, reset: t.reset, adjust: t.adjust }} 
+              />
+            </div>
+
+            {/* Target Display */}
+            <div className="w-full max-w-sm space-y-8 mt-6 px-2">
+              <div className="flex justify-between items-end px-1">
                 <div className="space-y-1">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.4em] opacity-30">Intention Progress</h3>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#124559] opacity-70">{t.progressToday}</p>
                   <div className="flex items-baseline space-x-2">
-                    <span className="text-5xl font-black cinzel tabular-nums">{state.todayCount}</span>
-                    <span className="text-lg font-bold opacity-20 cinzel tracking-widest">/ {state.todayTarget}</span>
+                    <span className="text-5xl font-black font-outfit tabular-nums text-[#01161e]">{state.todayCount}</span>
+                    <span className="text-base font-bold text-[#124559] opacity-40">/ {state.todayTarget}</span>
                   </div>
                 </div>
-                <button onClick={() => setShowTargetModal(true)} className="btn-divine px-10 py-5 rounded-[1.8rem] bg-emerald-600 text-white text-[10px] font-black uppercase tracking-[0.3em] shadow-2xl shadow-emerald-500/30">
-                  Set Target
+                <button 
+                  onClick={() => { setSelectedDate(getTodayStr()); setShowTargetModal(true); }} 
+                  className="px-6 py-3.5 rounded-2xl bg-[#124559] text-[#eff6e0] text-[10px] font-black uppercase tracking-widest shadow-xl transition-all hover:bg-[#01161e] active:scale-95"
+                >
+                  {t.setTarget}
                 </button>
               </div>
-              <div className={`h-6 rounded-full glass p-1.5 shadow-inner ${state.theme === 'dark' ? 'bg-black/50' : 'bg-stone-200/50'}`}>
-                <div className="h-full rounded-full bg-gradient-to-r from-emerald-700 via-emerald-400 to-emerald-600 transition-all duration-1000 shadow-[0_0_25px_rgba(16,185,129,0.4)]" style={{ width: `${progressPercent}%` }}></div>
+
+              {/* Progress Bar */}
+              <div className="h-4 w-full bg-white rounded-full overflow-hidden shadow-inner border border-black/5">
+                <div 
+                  className="h-full bg-gradient-to-r from-[#124559] via-[#10b981] to-[#7af0bb] transition-all duration-1000 ease-out"
+                  style={{ width: `${progressPercent}%` }}
+                ></div>
               </div>
-              <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-[0.2em] opacity-40">
-                 <span className="flex items-center space-x-2"><span className="w-2 h-2 rounded-full bg-emerald-400"></span><span>{currentStreak} Day Streak</span></span>
-                 <span>{Math.round(progressPercent)}% Accomplished</span>
+
+              {/* Statistics */}
+              <div className="flex justify-between items-center text-[11px] font-black uppercase tracking-widest text-[#124559]">
+                 <span className="flex items-center space-x-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#10b981] shadow-sm"></div>
+                    <span>{t.streak}: {currentStreak} {t.days}</span>
+                 </span>
+                 <span className="opacity-80">{Math.round(progressPercent)}% {t.achieved}</span>
               </div>
             </div>
 
-            <Counter initialCount={state.todayCount} onCountChange={updateCount} />
+            {/* Reflection Section */}
+            <section className="w-full mt-12 mb-8 p-10 rounded-[3.5rem] bg-white shadow-2xl shadow-black/[0.03] flex flex-col space-y-8 border border-black/[0.03]">
+              <div className="flex items-center space-x-4 opacity-30">
+                <div className="h-[1px] flex-grow bg-black"></div>
+                <h3 className="text-[11px] font-black uppercase tracking-[0.4em] whitespace-nowrap text-black">{t.benefits}</h3>
+                <div className="h-[1px] flex-grow bg-black"></div>
+              </div>
+              <div className="grid gap-6">
+                {[t.benefit1, t.benefit2, t.benefit3].map((b, i) => (
+                  <div key={i} className="flex space-x-5 group">
+                    <span className="text-[#10b981] font-outfit font-black text-sm opacity-30 group-hover:opacity-100 transition-opacity">0{i+1}</span>
+                    <p className="text-[14px] leading-relaxed text-[#01161e] font-bold opacity-80 group-hover:opacity-100 transition-opacity">{b}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
           </div>
         )}
 
         {state.currentView === 'planner' && (
-          <div className="space-y-12 animate-in slide-in-from-bottom-8 duration-700 px-2">
-            <h2 className="text-4xl font-black cinzel tracking-tighter">Spiritual Roadmap</h2>
-            <p className="text-sm opacity-50 serif italic max-w-sm">"Success lies in the intention prepared beforehand."</p>
+          <div className="space-y-8 animate-in slide-in-from-bottom-8 duration-700 pb-12">
+            <h2 className="text-2xl font-black uppercase tracking-widest text-[#124559] px-2">{t.plannerTitle}</h2>
             
-            <div className="space-y-6">
-              {upcomingDays.map((date, idx) => {
-                const planned = state.plannedTargets.find(p => p.date === date);
-                return (
-                  <div key={date} className={`p-10 rounded-[2.5rem] glass flex items-center justify-between group hover:scale-[1.02] transition-all duration-300
-                    ${idx === 0 ? 'ring-2 ring-emerald-500/50' : ''}`}>
-                    <div className="space-y-2">
-                      <span className="text-xs font-black opacity-30 uppercase tracking-[0.2em]">
-                        {idx === 0 ? 'Tomorrow' : new Date(date).toLocaleDateString(undefined, { weekday: 'long' })}
-                      </span>
-                      <p className="text-xl font-bold tracking-tight">{new Date(date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</p>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <input 
-                        type="number"
-                        placeholder="Target"
-                        value={planned?.target || ''}
-                        onChange={(e) => setPlanningTarget(date, e.target.value)}
-                        className={`w-24 text-center py-4 rounded-2xl outline-none font-bold cinzel text-xl glass
-                          ${state.theme === 'dark' ? 'bg-white/5 focus:ring-emerald-500' : 'bg-stone-50 focus:ring-emerald-400'}`}
-                      />
-                      <span className="text-[10px] font-black uppercase opacity-20 tracking-widest">Count</span>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="p-8 rounded-[3rem] bg-white shadow-2xl border border-black/[0.03]">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-lg font-black text-[#124559] font-outfit">
+                  {calendarViewDate.toLocaleDateString(state.language === 'en' ? 'en-US' : 'bn-BD', { month: 'long', year: 'numeric' })}
+                </h3>
+                <div className="flex space-x-2">
+                  <button onClick={() => changeMonth(-1)} className="p-2 bg-black/5 rounded-xl hover:bg-black/10 transition-colors">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                  </button>
+                  <button onClick={() => changeMonth(1)} className="p-2 bg-black/5 rounded-xl hover:bg-black/10 transition-colors">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-7 gap-2 mb-4">
+                {['S','M','T','W','T','F','S'].map(d => (
+                  <div key={d} className="text-center text-[10px] font-black text-[#124559] opacity-30">{d}</div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-2">
+                {calendarDays.map((date, idx) => {
+                  if (!date) return <div key={`empty-${idx}`} className="aspect-square"></div>;
+                  const dayNum = date.split('-')[2];
+                  const hasTarget = state.plannedTargets.some(p => p.date === date);
+                  const isSelected = selectedDate === date;
+                  const isToday = date === getTodayStr();
+
+                  return (
+                    <button 
+                      key={date}
+                      onClick={() => { setSelectedDate(date); setShowTargetModal(true); }}
+                      className={`
+                        aspect-square rounded-2xl flex flex-col items-center justify-center transition-all relative group
+                        ${isSelected ? 'bg-[#124559] text-white shadow-lg' : 'bg-black/5 hover:bg-black/10 text-[#01161e]'}
+                        ${isToday && !isSelected ? 'ring-2 ring-[#10b981]' : ''}
+                      `}
+                    >
+                      <span className="text-sm font-black font-outfit">{dayNum}</span>
+                      {hasTarget && (
+                        <div className={`w-1 h-1 rounded-full mt-1 ${isSelected ? 'bg-white' : 'bg-[#10b981]'}`}></div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+
+            <p className="text-center text-[11px] font-bold text-[#124559] opacity-50 uppercase tracking-widest">{t.selectDate}</p>
           </div>
         )}
 
         {state.currentView === 'analytics' && (
-          <div className="space-y-12 animate-in fade-in duration-700">
-             <div className="flex items-center justify-between">
-              <h2 className="text-4xl font-black cinzel tracking-tighter">Grand Chronicles</h2>
-              <div className="px-5 py-2.5 rounded-full glass text-[10px] font-black uppercase tracking-[0.2em] border border-emerald-500/20 text-emerald-500">Active Journey</div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-8">
-              <div className={`p-10 rounded-[3rem] glass flex flex-col items-center text-center`}>
-                <span className="text-[10px] font-black opacity-30 uppercase tracking-[0.4em] mb-4">Lifetime Total</span>
-                <span className="text-5xl font-black cinzel tracking-tighter text-glow">{state.logs.reduce((a,b)=>a+b.count,0).toLocaleString()}</span>
-              </div>
-              <div className={`p-10 rounded-[3rem] glass flex flex-col items-center text-center`}>
-                <span className="text-[10px] font-black opacity-30 uppercase tracking-[0.4em] mb-4">Consistency</span>
-                <span className="text-5xl font-black cinzel tracking-tighter">{currentStreak}</span>
-                <span className="text-[9px] mt-2 opacity-30 font-black uppercase">Day Streak</span>
-              </div>
-            </div>
-
-            <HistoryChart data={state.logs} />
-
-            <div className="p-10 rounded-[3rem] glass">
-              <h3 className="text-xs font-black mb-10 opacity-30 uppercase tracking-[0.4em]">Historical Ledger</h3>
-              <div className="space-y-8">
-                {[...state.logs].reverse().map((log, i) => (
-                  <div key={i} className="flex justify-between items-center group">
-                    <span className="text-sm font-bold opacity-80">{new Date(log.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}</span>
-                    <div className="flex items-center space-x-6">
-                      <div className="text-right"><span className="text-2xl font-black cinzel block">{log.count}</span><span className="text-[8px] opacity-30 font-black uppercase">Recited</span></div>
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${log.count >= log.target ? 'bg-emerald-500/20 text-emerald-500' : 'bg-stone-500/10 text-stone-500'}`}>
-                        {log.count >= log.target ? <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> : <span className="text-[9px] font-black">{Math.round((log.count/log.target)*100)}%</span>}
+          <div className="space-y-10 animate-in fade-in duration-700 pb-12">
+             <h2 className="text-2xl font-black uppercase tracking-widest text-[#124559] px-2">{t.insights}</h2>
+             <HistoryChart data={state.logs} />
+             <div className="p-10 rounded-[3.5rem] bg-white border border-black/[0.03] shadow-2xl shadow-black/[0.03]">
+                <h3 className="text-[11px] font-black mb-10 opacity-40 uppercase tracking-widest text-black">{t.history}</h3>
+                <div className="space-y-6">
+                  {[...state.logs].reverse().slice(0, 5).map((log, i) => (
+                    <div key={i} className="flex justify-between items-center group">
+                      <span className="text-xs font-bold text-[#124559] opacity-60">{new Date(log.date).toLocaleDateString(state.language === 'en' ? 'en-US' : 'bn-BD', { day: 'numeric', month: 'short' })}</span>
+                      <div className="flex items-center space-x-5">
+                        <span className="text-2xl font-black font-outfit text-[#01161e]">{log.count}</span>
+                        <div className={`w-3 h-3 rounded-full ${log.count >= log.target ? 'bg-[#10b981] shadow-[0_0_12px_rgba(16,185,129,0.5)]' : 'bg-black/5'}`}></div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+                  ))}
+                </div>
+             </div>
           </div>
         )}
       </main>
 
-      {/* Modern Navigation Dock */}
-      <nav className={`fixed bottom-10 left-1/2 -translate-x-1/2 px-10 py-6 rounded-[3rem] z-50 flex space-x-16 glass shadow-[0_40px_100px_rgba(0,0,0,0.5)] border
-        ${state.theme === 'dark' ? 'border-emerald-900/30' : 'border-white/50'}`}>
-        <button onClick={() => setState(s => ({ ...s, currentView: 'planner' }))} className={`flex flex-col items-center space-y-2 transition-all ${state.currentView === 'planner' ? 'text-emerald-500 scale-125' : 'opacity-20 hover:opacity-50'}`}>
-          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2zm-7 5h5v5h-5v-5z"/></svg>
-          <span className="text-[7px] font-black uppercase tracking-widest">Planner</span>
+      {/* Navigation Bar */}
+      <nav className="fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-5 rounded-[3.5rem] z-50 flex items-center justify-between w-[90%] max-w-md bg-white/95 backdrop-blur-2xl shadow-[0_30px_60px_-15px_rgba(0,0,0,0.15)] border border-black/5">
+        <button 
+          onClick={() => setState(s => ({ ...s, currentView: 'home' }))} 
+          className={`flex flex-col items-center transition-all duration-300 ${state.currentView === 'home' ? 'text-[#10b981] scale-110' : 'text-black opacity-30 hover:opacity-100'}`}
+        >
+          <svg className="w-7 h-7 mb-1" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l-5.5 9h11L12 2zm0 10c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6z"/></svg>
+          <span className="text-[9px] font-black uppercase tracking-wider">{t.navHome}</span>
         </button>
-        <button onClick={() => setState(s => ({ ...s, currentView: 'home' }))} className={`flex flex-col items-center space-y-2 transition-all ${state.currentView === 'home' ? 'text-emerald-500 scale-125' : 'opacity-20 hover:opacity-50'}`}>
-          <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l-5.5 9h11L12 2zm0 10c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6z"/></svg>
-          <span className="text-[7px] font-black uppercase tracking-widest">Presence</span>
+
+        <button 
+          onClick={() => setState(s => ({ ...s, currentView: 'planner' }))} 
+          className={`flex flex-col items-center transition-all duration-300 ${state.currentView === 'planner' ? 'text-[#10b981] scale-110' : 'text-black opacity-30 hover:opacity-100'}`}
+        >
+          <svg className="w-7 h-7 mb-1" fill="currentColor" viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10z"/></svg>
+          <span className="text-[9px] font-black uppercase tracking-wider">{t.navPlanner}</span>
         </button>
-        <button onClick={() => setState(s => ({ ...s, currentView: 'analytics' }))} className={`flex flex-col items-center space-y-2 transition-all ${state.currentView === 'analytics' ? 'text-emerald-500 scale-125' : 'opacity-20 hover:opacity-50'}`}>
-          <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6h-6z"/></svg>
-          <span className="text-[7px] font-black uppercase tracking-widest">Journey</span>
+
+        <button 
+          onClick={() => setState(s => ({ ...s, currentView: 'analytics' }))} 
+          className={`flex flex-col items-center transition-all duration-300 ${state.currentView === 'analytics' ? 'text-[#10b981] scale-110' : 'text-black opacity-30 hover:opacity-100'}`}
+        >
+          <svg className="w-7 h-7 mb-1" fill="currentColor" viewBox="0 0 24 24"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6h-6z"/></svg>
+          <span className="text-[9px] font-black uppercase tracking-wider">{t.navInsights}</span>
         </button>
       </nav>
 
-      {/* Target Intent Modal */}
+      {/* Target Modal */}
       {showTargetModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-8 bg-black/90 backdrop-blur-xl animate-in fade-in duration-500">
-          <div className="w-full max-w-sm rounded-[4rem] p-16 glass border border-emerald-500/10 shadow-[0_0_100px_rgba(5,150,105,0.2)]">
-            <h2 className="text-3xl font-black cinzel mb-4 tracking-tighter">New Intention</h2>
-            <p className="text-xs opacity-50 mb-12 font-bold uppercase tracking-widest">Define your spiritual commitment for today.</p>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-8 bg-[#01161e]/80 backdrop-blur-xl animate-in fade-in duration-500">
+          <div className="w-full max-w-sm rounded-[4rem] p-12 bg-white shadow-2xl border border-black/5 animate-in zoom-in-95 duration-300">
+            <h2 className="text-[12px] font-black mb-8 text-center uppercase tracking-[0.5em] text-[#124559] opacity-40">
+              {new Date(selectedDate).toLocaleDateString(state.language === 'en' ? 'en-US' : 'bn-BD', { day: 'numeric', month: 'short' })} {t.target}
+            </h2>
             <input 
               type="number" 
               value={targetInput}
               onChange={(e) => setTargetInput(e.target.value)}
-              placeholder={(state.todayTarget || 100).toString()}
-              className="w-full text-center text-7xl font-black cinzel py-10 rounded-[3rem] mb-12 bg-white/5 outline-none focus:ring-4 ring-emerald-500/30 transition-all text-emerald-400"
+              placeholder={(state.plannedTargets.find(p => p.date === selectedDate)?.target || 100).toString()}
+              className="w-full text-center text-8xl font-black font-outfit py-10 rounded-[2.5rem] mb-12 bg-[#eff6e0] outline-none text-[#124559] shadow-inner"
               autoFocus
             />
-            <div className="grid grid-cols-2 gap-8">
-              <button onClick={() => setShowTargetModal(false)} className="py-6 rounded-3xl text-[10px] font-black uppercase tracking-widest opacity-30">Cancel</button>
-              <button onClick={handleSetTarget} className="btn-divine py-6 rounded-3xl bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest">Confirm</button>
+            <div className="grid grid-cols-2 gap-6">
+              <button 
+                onClick={() => { setShowTargetModal(false); setTargetInput(''); }} 
+                className="py-6 rounded-[2rem] text-[12px] font-black uppercase tracking-widest text-[#124559] opacity-40 hover:opacity-100 transition-opacity"
+              >
+                {t.cancel}
+              </button>
+              <button 
+                onClick={handleSetTarget} 
+                className="py-6 rounded-[2rem] bg-[#124559] text-white text-[12px] font-black uppercase tracking-widest shadow-2xl transition-all hover:bg-[#01161e]"
+              >
+                {t.set}
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Footer */}
+      <footer className="mt-auto py-16 text-center opacity-40 hover:opacity-100 transition-opacity duration-500">
+         <p className="text-[11px] font-black uppercase tracking-[0.5em] text-[#124559]">{t.madeBy}</p>
+      </footer>
     </div>
   );
 };
