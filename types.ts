@@ -2,6 +2,7 @@
 export interface DailyContent {
   motivation: string;
   challenge: string;
+  reflection?: string;
 }
 
 export interface LogEntry {
