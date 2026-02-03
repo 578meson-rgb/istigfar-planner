@@ -1,11 +1,13 @@
+
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 interface AuthProps {
   language: 'en' | 'bn';
+  onBack?: () => void;
 }
 
-const Auth: React.FC<AuthProps> = ({ language }) => {
+const Auth: React.FC<AuthProps> = ({ language, onBack }) => {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,6 +27,7 @@ const Auth: React.FC<AuthProps> = ({ language }) => {
       toggleLogin: "Already have an account? Login",
       toggleSignup: "New here? Create an account",
       success: "Success! Check your email to verify your account.",
+      back: "Back to Home"
     },
     bn: {
       title: "স্বাগতম",
@@ -38,6 +41,7 @@ const Auth: React.FC<AuthProps> = ({ language }) => {
       toggleLogin: "আগে থেকেই অ্যাকাউন্ট আছে? লগইন করুন",
       toggleSignup: "নতুন? একটি অ্যাকাউন্ট তৈরি করুন",
       success: "সফল হয়েছে! আপনার ইমেল যাচাই করুন।",
+      back: "হোমে ফিরে যান"
     }
   }[language];
 
@@ -87,9 +91,14 @@ const Auth: React.FC<AuthProps> = ({ language }) => {
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-[#faf9f6]">
       <div className="w-full max-w-md p-10 bg-white rounded-[3.5rem] shadow-2xl border border-black/[0.03] space-y-8 animate-in fade-in zoom-in duration-700">
-        <div className="text-center space-y-2">
-          <h2 className="text-3xl font-black font-outfit text-[#124559]">{isSignUp ? t.signup : t.title}</h2>
-          <p className="text-sm font-medium opacity-40 font-outfit">{t.subtitle}</p>
+        <div className="flex justify-between items-start">
+          <div className="space-y-2">
+            <h2 className="text-3xl font-black font-outfit text-[#124559]">{isSignUp ? t.signup : t.title}</h2>
+            <p className="text-sm font-medium opacity-40 font-outfit">{t.subtitle}</p>
+          </div>
+          {onBack && (
+            <button onClick={onBack} className="w-8 h-8 rounded-full bg-black/5 flex items-center justify-center text-[10px]">✕</button>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -152,15 +161,25 @@ const Auth: React.FC<AuthProps> = ({ language }) => {
           </form>
         </div>
 
-        <button 
-          onClick={() => {
-            setIsSignUp(!isSignUp);
-            setMessage(null);
-          }}
-          className="w-full text-[11px] font-bold uppercase tracking-widest text-[#124559] opacity-40 hover:opacity-100 transition-all"
-        >
-          {isSignUp ? t.toggleLogin : t.toggleSignup}
-        </button>
+        <div className="flex flex-col space-y-4">
+          <button 
+            onClick={() => {
+              setIsSignUp(!isSignUp);
+              setMessage(null);
+            }}
+            className="w-full text-[11px] font-bold uppercase tracking-widest text-[#124559] opacity-40 hover:opacity-100 transition-all"
+          >
+            {isSignUp ? t.toggleLogin : t.toggleSignup}
+          </button>
+          {onBack && (
+            <button 
+              onClick={onBack}
+              className="w-full text-[10px] font-black uppercase tracking-widest text-[#124559] opacity-20 hover:opacity-50 transition-all"
+            >
+              ← {t.back}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

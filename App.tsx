@@ -5,6 +5,7 @@ import { fetchDailyContent, LocalizedDailyContent } from './services/geminiServi
 import Counter from './components/Counter';
 import HistoryChart from './components/HistoryChart';
 import Auth from './components/Auth';
+import Landing from './components/Landing';
 import { supabase } from './lib/supabase';
 import { Session } from '@supabase/supabase-js';
 
@@ -71,6 +72,7 @@ const translations = {
 
 const App: React.FC = () => {
   const [session, setSession] = useState<Session | null>(null);
+  const [showAuth, setShowAuth] = useState(false);
   const [state, setState] = useState<AppState & { localizedContent: LocalizedDailyContent | null, isSyncing: boolean }>({
     logs: [],
     plannedTargets: [],
@@ -103,6 +105,7 @@ const App: React.FC = () => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (session) setShowAuth(false);
     });
 
     return () => subscription.unsubscribe();
@@ -201,6 +204,7 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setSession(null);
+    setShowAuth(false);
   };
 
   const currentStreak = useMemo(() => {
@@ -222,7 +226,13 @@ const App: React.FC = () => {
 
   const totalCount = useMemo(() => state.logs.reduce((acc, curr) => acc + curr.count, 0) + state.todayCount, [state.logs, state.todayCount]);
 
-  if (!session) return <Auth language={state.language} />;
+  // View Logic
+  if (!session) {
+    if (showAuth) {
+      return <Auth language={state.language} onBack={() => setShowAuth(false)} />;
+    }
+    return <Landing language={state.language} onGetStarted={() => setShowAuth(true)} />;
+  }
 
   const progressPercent = Math.min(100, (state.todayCount / (state.todayTarget || 1)) * 100);
 
