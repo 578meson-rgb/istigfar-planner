@@ -4,14 +4,12 @@ import { AppState, LogEntry, View, PlannedTarget, Language } from './types';
 import { fetchDailyContent, LocalizedDailyContent } from './services/geminiService';
 import Counter from './components/Counter';
 import HistoryChart from './components/HistoryChart';
-import Auth from './components/Auth';
-import Landing from './components/Landing';
-import { supabase } from './lib/supabase';
-import { Session } from '@supabase/supabase-js';
 
 const translations = {
   en: {
     appName: "Istighfar Tracker",
+    welcome: "Welcome to Istighfar Tracker",
+    instruction: "Tap the circle to begin your remembrance. Seek forgiveness with a present heart.",
     progressToday: "Progress Today",
     setTarget: "Set Target",
     roadmap: "Roadmap",
@@ -34,13 +32,14 @@ const translations = {
     navInsights: "Insights",
     plannerTitle: "Plan Your Journey",
     selectDate: "Select a date to set target",
-    logout: "Logout",
-    syncing: "Saving to Cloud...",
     refresh: "Refresh Content",
-    reflection: "Reflection"
+    reflection: "Reflection",
+    settings: "Settings"
   },
   bn: {
     appName: "ইস্তিগফার ট্র্যাকার",
+    welcome: "ইস্তিগফার ট্র্যাকারে আপনাকে স্বাগতম",
+    instruction: "আপনার জিকির শুরু করতে বৃত্তটিতে স্পর্শ করুন। একাগ্রচিত্তে ক্ষমা প্রার্থনা করুন।",
     progressToday: "আজকের অগ্রগতি",
     setTarget: "লক্ষ্য নির্ধারণ",
     roadmap: "পরিকল্পনা",
@@ -63,17 +62,14 @@ const translations = {
     navInsights: "পরিসংখ্যান",
     plannerTitle: "আপনার যাত্রা পরিকল্পনা করুন",
     selectDate: "লক্ষ্য নির্ধারণ করতে একটি তারিখ নির্বাচন করুন",
-    logout: "লগআউট",
-    syncing: "ক্লাউডে সেভ হচ্ছে...",
     refresh: "নতুন তথ্য",
-    reflection: "প্রতিফলন"
+    reflection: "প্রতিফলন",
+    settings: "সেটিংস"
   }
 };
 
 const App: React.FC = () => {
-  const [session, setSession] = useState<Session | null>(null);
-  const [showAuth, setShowAuth] = useState(false);
-  const [state, setState] = useState<AppState & { localizedContent: LocalizedDailyContent | null, isSyncing: boolean }>({
+  const [state, setState] = useState<AppState & { localizedContent: LocalizedDailyContent | null }>({
     logs: [],
     plannedTargets: [],
     todayCount: 0,
@@ -84,8 +80,7 @@ const App: React.FC = () => {
     theme: 'light',
     language: 'en',
     currentView: 'home',
-    error: null,
-    isSyncing: false
+    error: null
   });
 
   const [showTargetModal, setShowTargetModal] = useState(false);
@@ -97,18 +92,26 @@ const App: React.FC = () => {
   const getTodayStr = () => new Date().toISOString().split('T')[0];
   const t = translations[state.language];
 
-  // Auth Listener
+  // Load Initial Data from LocalStorage
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
+    const savedLogs = localStorage.getItem('istighfar_logs');
+    const savedPlanned = localStorage.getItem('istighfar_planned');
+    const logs: LogEntry[] = savedLogs ? JSON.parse(savedLogs) : [];
+    const planned: PlannedTarget[] = savedPlanned ? JSON.parse(savedPlanned) : [];
+    
+    const today = getTodayStr();
+    const todayLog = logs.find(l => l.date === today);
+    const todayPlanned = planned.find(p => p.date === today);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) setShowAuth(false);
-    });
+    setState(prev => ({
+      ...prev,
+      logs,
+      plannedTargets: planned,
+      todayCount: todayLog ? todayLog.count : 0,
+      todayTarget: todayPlanned ? todayPlanned.target : (todayLog ? todayLog.target : 100),
+    }));
 
-    return () => subscription.unsubscribe();
+    loadDailyContent(state.language);
   }, []);
 
   const loadDailyContent = useCallback(async (lang: Language) => {
@@ -122,41 +125,11 @@ const App: React.FC = () => {
     }));
   }, []);
 
-  // Fetch Data from Supabase
-  useEffect(() => {
-    if (!session) return;
-
-    const fetchData = async () => {
-      const today = getTodayStr();
-      const { data: logsData } = await supabase.from('istighfar_logs').select('*').order('date', { ascending: true });
-      const { data: plannedData } = await supabase.from('planned_targets').select('*');
-      const todayLog = logsData?.find(l => l.date === today);
-      const todayPlanned = plannedData?.find(p => p.date === today);
-
-      setState(prev => ({
-        ...prev,
-        logs: logsData || [],
-        plannedTargets: plannedData || [],
-        todayCount: todayLog ? todayLog.count : 0,
-        todayTarget: todayPlanned ? todayPlanned.target : (todayLog ? todayLog.target : 100),
-      }));
-    };
-
-    fetchData();
-    loadDailyContent(state.language);
-  }, [session, state.language, loadDailyContent]);
-
-  const syncToSupabase = useCallback(async (count: number, target: number) => {
-    if (!session) return;
-    setState(prev => ({ ...prev, isSyncing: true }));
-    await supabase.from('istighfar_logs').upsert({
-      user_id: session.user.id,
-      date: getTodayStr(),
-      count,
-      target
-    });
-    setState(prev => ({ ...prev, isSyncing: false }));
-  }, [session]);
+  // Save to LocalStorage helper
+  const saveStateToLocal = (logs: LogEntry[], planned: PlannedTarget[]) => {
+    localStorage.setItem('istighfar_logs', JSON.stringify(logs));
+    localStorage.setItem('istighfar_planned', JSON.stringify(planned));
+  };
 
   const playPing = useCallback(() => {
     try {
@@ -167,7 +140,7 @@ const App: React.FC = () => {
       const gain = ctx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.3);
+      osc.frequency.exponentialRampToValueToTime(440, ctx.currentTime + 0.3);
       gain.gain.setValueAtTime(0, ctx.currentTime);
       gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.05);
       gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
@@ -180,31 +153,50 @@ const App: React.FC = () => {
 
   const handleCountChange = (newCount: number) => {
     if (newCount > state.todayCount) playPing();
-    setState(prev => ({ ...prev, todayCount: newCount }));
-    syncToSupabase(newCount, state.todayTarget || 100);
+    
+    const today = getTodayStr();
+    const updatedLogs = [...state.logs];
+    const index = updatedLogs.findIndex(l => l.date === today);
+    
+    if (index > -1) {
+      updatedLogs[index] = { ...updatedLogs[index], count: newCount };
+    } else {
+      updatedLogs.push({ date: today, count: newCount, target: state.todayTarget || 100 });
+    }
+
+    setState(prev => ({ ...prev, todayCount: newCount, logs: updatedLogs }));
+    saveStateToLocal(updatedLogs, state.plannedTargets);
   };
 
-  const handleSetTarget = async () => {
+  const handleSetTarget = () => {
     const val = parseInt(targetInput);
-    if (!isNaN(val) && val >= 0 && session) {
+    if (!isNaN(val) && val >= 0) {
       const today = getTodayStr();
+      let updatedLogs = [...state.logs];
+      let updatedPlanned = [...state.plannedTargets];
+
       if (selectedDate === today) {
         setState(prev => ({ ...prev, todayTarget: val }));
-        await syncToSupabase(state.todayCount, val);
+        const index = updatedLogs.findIndex(l => l.date === today);
+        if (index > -1) {
+          updatedLogs[index] = { ...updatedLogs[index], target: val };
+        } else {
+          updatedLogs.push({ date: today, count: state.todayCount, target: val });
+        }
       } else {
-        await supabase.from('planned_targets').upsert({ user_id: session.user.id, date: selectedDate, target: val });
-        const { data } = await supabase.from('planned_targets').select('*');
-        setState(prev => ({ ...prev, plannedTargets: data || [] }));
+        const pIndex = updatedPlanned.findIndex(p => p.date === selectedDate);
+        if (pIndex > -1) {
+          updatedPlanned[pIndex] = { ...updatedPlanned[pIndex], target: val };
+        } else {
+          updatedPlanned.push({ date: selectedDate, target: val });
+        }
       }
+
+      setState(prev => ({ ...prev, logs: updatedLogs, plannedTargets: updatedPlanned }));
+      saveStateToLocal(updatedLogs, updatedPlanned);
       setShowTargetModal(false);
       setTargetInput('');
     }
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    setShowAuth(false);
   };
 
   const currentStreak = useMemo(() => {
@@ -224,28 +216,26 @@ const App: React.FC = () => {
     return s;
   }, [state.logs, state.todayCount]);
 
-  const totalCount = useMemo(() => state.logs.reduce((acc, curr) => acc + curr.count, 0) + state.todayCount, [state.logs, state.todayCount]);
-
-  // View Logic
-  if (!session) {
-    if (showAuth) {
-      return <Auth language={state.language} onBack={() => setShowAuth(false)} />;
-    }
-    return <Landing language={state.language} onGetStarted={() => setShowAuth(true)} />;
-  }
+  const totalCount = useMemo(() => state.logs.reduce((acc, curr) => acc + curr.count, 0), [state.logs]);
 
   const progressPercent = Math.min(100, (state.todayCount / (state.todayTarget || 1)) * 100);
 
   return (
-    <div className="min-h-screen bg-[#faf9f6] text-[#01161e] font-outfit">
-      <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-8 flex justify-between items-center bg-[#faf9f6]/80 backdrop-blur-xl border-b border-black/[0.02]">
-        <div className="flex flex-col">
-          <h1 className="text-xl font-black tracking-tighter text-[#124559]">{t.appName}</h1>
-          {state.isSyncing && <span className="text-[8px] font-black uppercase tracking-widest text-[#059669]">{t.syncing}</span>}
+    <div className="min-h-screen bg-[#faf9f6] text-[#01161e] font-outfit selection:bg-[#059669]/10">
+      {/* Dynamic Background */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-30">
+        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-[#7af0bb]/10 blur-[120px] rounded-full animate-pulse"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-[#598392]/10 blur-[150px] rounded-full animate-pulse" style={{ animationDelay: '2s' }}></div>
+      </div>
+
+      <nav className="fixed top-0 left-0 right-0 z-50 px-8 py-10 flex justify-between items-center bg-[#faf9f6]/80 backdrop-blur-xl border-b border-black/[0.02]">
+        <div className="flex items-center space-x-3">
+          <div className="w-2.5 h-2.5 rounded-full bg-[#059669]"></div>
+          <h1 className="text-xl font-black tracking-tighter text-[#124559] uppercase">{t.appName}</h1>
         </div>
-        <div className="flex items-center space-x-2">
-          <button onClick={() => setState(prev => ({ ...prev, language: prev.language === 'en' ? 'bn' : 'en' }))} className="w-10 h-10 rounded-full flex items-center justify-center bg-white border border-black/[0.05] shadow-sm font-black text-[10px] uppercase">{state.language === 'en' ? 'BN' : 'EN'}</button>
-          <button onClick={() => setShowSidebar(true)} className="w-10 h-10 rounded-full flex items-center justify-center bg-white border border-black/[0.05] shadow-sm">
+        <div className="flex items-center space-x-3">
+          <button onClick={() => setState(prev => ({ ...prev, language: prev.language === 'en' ? 'bn' : 'en' }))} className="w-10 h-10 rounded-full flex items-center justify-center bg-white border border-black/[0.05] shadow-sm font-black text-[10px] uppercase transition-all active:scale-95">{state.language === 'en' ? 'BN' : 'EN'}</button>
+          <button onClick={() => setShowSidebar(true)} className="w-10 h-10 rounded-full flex items-center justify-center bg-white border border-black/[0.05] shadow-sm transition-all active:scale-95">
              <div className="space-y-1">
                <div className="w-4 h-0.5 bg-[#124559] rounded-full"></div>
                <div className="w-3 h-0.5 bg-[#124559] rounded-full"></div>
@@ -254,48 +244,58 @@ const App: React.FC = () => {
         </div>
       </nav>
 
-      <main className="relative z-10 pt-32 pb-40 px-6 flex flex-col items-center">
+      <main className="relative z-10 pt-40 pb-44 px-6 flex flex-col items-center max-w-lg mx-auto">
         {state.currentView === 'home' && (
-          <div className="flex flex-col items-center space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-1000 w-full max-w-md">
-            <div className="w-full space-y-6">
+          <div className="flex flex-col items-center space-y-12 animate-in fade-in slide-in-from-bottom-6 duration-1000 w-full">
+            {/* App Header Info */}
+            <div className="text-center space-y-3 w-full px-4">
+              <h2 className="text-4xl md:text-5xl font-black text-[#124559] tracking-tighter leading-tight">
+                {t.welcome}
+              </h2>
+              <p className="text-sm font-medium text-[#124559]/50 leading-relaxed max-w-xs mx-auto">
+                {t.instruction}
+              </p>
+            </div>
+
+            <div className="w-full space-y-8">
               <div className="flex justify-between items-end px-4">
                 <div className="space-y-1">
-                  <h2 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40 font-outfit text-[#124559]">{t.progressToday}</h2>
-                  <div className="flex items-baseline space-x-2">
-                    <span className="text-4xl font-black font-outfit text-[#124559]">{state.todayCount}</span>
-                    <span className="text-sm font-bold opacity-30 font-outfit text-[#124559]">/ {state.todayTarget}</span>
+                  <h2 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-40 text-[#124559]">{t.progressToday}</h2>
+                  <div className="flex items-baseline space-x-3">
+                    <span className="text-5xl font-black text-[#124559]">{state.todayCount}</span>
+                    <span className="text-sm font-bold opacity-30 text-[#124559]">/ {state.todayTarget}</span>
                   </div>
                 </div>
-                <button onClick={() => { setSelectedDate(getTodayStr()); setShowTargetModal(true); }} className="text-[10px] font-black uppercase tracking-widest bg-[#124559]/5 px-4 py-2 rounded-full text-[#124559]">{t.setTarget}</button>
+                <button onClick={() => { setSelectedDate(getTodayStr()); setShowTargetModal(true); }} className="text-[10px] font-black uppercase tracking-widest bg-[#124559]/5 px-5 py-2.5 rounded-full text-[#124559] hover:bg-[#124559]/10 transition-colors">{t.setTarget}</button>
               </div>
-              <div className="w-full h-1.5 bg-[#124559]/5 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-[#059669] to-[#10b981] transition-all duration-1000" style={{ width: `${progressPercent}%` }} />
+              <div className="w-full h-2 bg-[#124559]/5 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-[#059669] to-[#10b981] transition-all duration-1000 shadow-sm" style={{ width: `${progressPercent}%` }} />
               </div>
             </div>
 
             <Counter count={state.todayCount} onCountChange={handleCountChange} labels={{ recite: t.recite, reset: t.reset, adjust: t.adjust }} />
 
-            <div className="w-full space-y-4">
+            <div className="w-full">
               {state.isLoadingContent ? (
-                <div className="w-full h-40 bg-black/5 animate-pulse rounded-[3rem]" />
+                <div className="w-full h-44 bg-black/5 animate-pulse rounded-[3.5rem]" />
               ) : state.dailyContent && (
-                <div className="w-full p-8 rounded-[3rem] bg-[#064e3b]/5 border border-[#064e3b]/10 space-y-6 relative group overflow-hidden">
-                  <div className="space-y-4">
-                    <p className="text-lg font-bold leading-relaxed text-[#064e3b] font-outfit italic">"{state.dailyContent.motivation}"</p>
-                    <div className="pt-2 border-t border-[#064e3b]/5 space-y-3">
-                      <p className="text-sm font-medium text-[#064e3b]/70 font-outfit">
-                        <span className="font-black uppercase text-[10px] mr-2 opacity-50">Challenge:</span>
+                <div className="w-full p-10 rounded-[3.5rem] bg-white border border-black/[0.03] space-y-8 relative group shadow-sm">
+                  <div className="space-y-6">
+                    <p className="text-xl font-bold leading-relaxed text-[#064e3b] italic">"{state.dailyContent.motivation}"</p>
+                    <div className="pt-6 border-t border-black/[0.03] space-y-4">
+                      <p className="text-sm font-medium text-[#124559]/70 leading-relaxed">
+                        <span className="font-black uppercase text-[10px] mr-3 opacity-40">Challenge:</span>
                         {state.dailyContent.challenge}
                       </p>
                       {state.dailyContent.reflection && (
-                        <p className="text-xs font-medium text-[#064e3b]/50 font-outfit leading-relaxed">
-                          <span className="font-black uppercase text-[9px] mr-2 opacity-40">{t.reflection}:</span>
+                        <p className="text-xs font-medium text-[#124559]/50 leading-relaxed">
+                          <span className="font-black uppercase text-[9px] mr-3 opacity-30">{t.reflection}:</span>
                           {state.dailyContent.reflection}
                         </p>
                       )}
                     </div>
                   </div>
-                  <button onClick={() => loadDailyContent(state.language)} className="absolute top-4 right-4 text-[9px] font-black uppercase tracking-widest text-[#064e3b] opacity-0 group-hover:opacity-40 transition-opacity hover:opacity-100">{t.refresh}</button>
+                  <button onClick={() => loadDailyContent(state.language)} className="absolute top-6 right-6 text-[9px] font-black uppercase tracking-widest text-[#124559] opacity-0 group-hover:opacity-30 transition-opacity hover:opacity-100">{t.refresh}</button>
                 </div>
               )}
             </div>
@@ -303,20 +303,23 @@ const App: React.FC = () => {
         )}
 
         {state.currentView === 'planner' && (
-          <div className="w-full max-w-md space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-            <h2 className="text-3xl font-black font-outfit text-[#124559]">{t.plannerTitle}</h2>
+          <div className="w-full space-y-12 animate-in fade-in slide-in-from-bottom-6 duration-1000">
+            <h2 className="text-4xl font-black text-[#124559] tracking-tighter">{t.plannerTitle}</h2>
             <div className="grid grid-cols-1 gap-4">
-              {[0, 1, 2, 3, 4].map(days => {
+              {[0, 1, 2, 3, 4, 5, 6].map(days => {
                 const date = new Date(); date.setDate(date.getDate() + days);
                 const dStr = date.toISOString().split('T')[0];
                 const planned = state.plannedTargets.find(p => p.date === dStr);
+                const log = state.logs.find(l => l.date === dStr);
                 return (
-                  <div key={dStr} onClick={() => { setSelectedDate(dStr); setShowTargetModal(true); }} className="p-6 rounded-[2.5rem] bg-white border border-black/[0.03] shadow-sm flex justify-between items-center cursor-pointer hover:border-[#059669]/20 transition-all">
-                    <div className="space-y-1">
+                  <div key={dStr} onClick={() => { setSelectedDate(dStr); setShowTargetModal(true); }} className="p-8 rounded-[3rem] bg-white border border-black/[0.03] shadow-sm flex justify-between items-center cursor-pointer hover:border-[#059669]/20 transition-all active:scale-[0.98]">
+                    <div className="space-y-1.5">
                       <span className="text-[10px] font-black uppercase tracking-widest opacity-30 block">{days === 0 ? 'Today' : date.toLocaleDateString(undefined, { weekday: 'long' })}</span>
                       <span className="text-lg font-bold text-[#124559]">{date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                     </div>
-                    <span className="text-xl font-black text-[#059669]">{planned ? planned.target : (days === 0 ? state.todayTarget : 100)}</span>
+                    <div className="flex items-baseline space-x-1">
+                      <span className="text-2xl font-black text-[#059669]">{planned ? planned.target : (log ? log.target : 100)}</span>
+                    </div>
                   </div>
                 );
               })}
@@ -325,15 +328,17 @@ const App: React.FC = () => {
         )}
 
         {state.currentView === 'analytics' && (
-          <div className="w-full max-w-md space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-            <div className="flex justify-between items-center">
-              <h2 className="text-3xl font-black font-outfit text-[#124559]">{t.navInsights}</h2>
-              <div className="flex space-x-2">
-                <div className="px-4 py-3 rounded-2xl bg-[#059669]/10 text-center">
-                  <span className="text-sm font-black text-[#059669] font-outfit">{currentStreak} {t.days}</span>
+          <div className="w-full space-y-12 animate-in fade-in slide-in-from-bottom-6 duration-1000">
+            <div className="flex flex-col space-y-4">
+              <h2 className="text-4xl font-black text-[#124559] tracking-tighter">{t.navInsights}</h2>
+              <div className="flex space-x-3">
+                <div className="flex-1 p-6 rounded-[2.5rem] bg-[#059669]/5 text-center">
+                  <span className="text-xl font-black text-[#059669] block">{currentStreak}</span>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-[#059669] opacity-50">{t.streak}</span>
                 </div>
-                <div className="px-4 py-3 rounded-2xl bg-[#124559]/5 text-center">
-                  <span className="text-sm font-black text-[#124559] font-outfit">{totalCount} {t.recite}</span>
+                <div className="flex-1 p-6 rounded-[2.5rem] bg-[#124559]/5 text-center">
+                  <span className="text-xl font-black text-[#124559] block">{totalCount}</span>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-[#124559] opacity-50">Total</span>
                 </div>
               </div>
             </div>
@@ -342,48 +347,56 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center p-2 rounded-full bg-white shadow-2xl border border-black/[0.03]">
+      {/* Floating Bottom Nav */}
+      <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 flex items-center p-2 rounded-full bg-white/80 backdrop-blur-2xl shadow-2xl border border-black/[0.03]">
         {[
           { id: 'home', icon: '✦', label: t.navHome },
           { id: 'planner', icon: '◈', label: t.navPlanner },
           { id: 'analytics', icon: '◉', label: t.navInsights }
         ].map((item) => (
-          <button key={item.id} onClick={() => setState(prev => ({ ...prev, currentView: item.id as View }))} className={`flex items-center space-x-2 px-6 py-3 rounded-full transition-all ${state.currentView === item.id ? 'bg-[#124559] text-white' : 'text-[#124559]/40 hover:text-[#124559]'}`}>
-            <span className="text-lg">{item.icon}</span>
-            {state.currentView === item.id && <span className="text-[10px] font-black uppercase tracking-widest">{item.label}</span>}
+          <button key={item.id} onClick={() => setState(prev => ({ ...prev, currentView: item.id as View }))} className={`flex items-center space-x-3 px-8 py-4 rounded-full transition-all active:scale-95 ${state.currentView === item.id ? 'bg-[#124559] text-white shadow-lg shadow-[#124559]/20' : 'text-[#124559]/40 hover:text-[#124559]'}`}>
+            <span className="text-xl">{item.icon}</span>
+            {state.currentView === item.id && <span className="text-[10px] font-black uppercase tracking-[0.2em]">{item.label}</span>}
           </button>
         ))}
       </div>
 
+      {/* Target Modal */}
       {showTargetModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/20 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="w-full max-sm bg-white rounded-[3.5rem] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-300">
-            <h3 className="text-2xl font-black text-[#124559]">{t.setTarget}</h3>
-            <input type="number" autoFocus value={targetInput} onChange={(e) => setTargetInput(e.target.value)} className="w-full text-4xl font-black p-0 border-none focus:ring-0 text-[#124559] placeholder:text-[#124559]/10" placeholder="e.g. 500" />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/10 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="w-full max-w-sm bg-white rounded-[4rem] p-12 shadow-2xl space-y-10 animate-in zoom-in duration-300">
+            <div className="space-y-2">
+              <span className="text-[10px] font-black uppercase tracking-widest opacity-30">{new Date(selectedDate).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</span>
+              <h3 className="text-3xl font-black text-[#124559] tracking-tighter">{t.setTarget}</h3>
+            </div>
+            <input type="number" autoFocus value={targetInput} onChange={(e) => setTargetInput(e.target.value)} className="w-full text-5xl font-black p-0 border-none focus:ring-0 text-[#124559] placeholder:text-[#124559]/10" placeholder="500" />
             <div className="flex space-x-4">
-              <button onClick={() => setShowTargetModal(false)} className="flex-1 py-5 rounded-[2rem] text-[11px] font-black uppercase tracking-widest text-[#124559] bg-[#124559]/5">{t.cancel}</button>
-              <button onClick={handleSetTarget} className="flex-1 py-5 rounded-[2rem] text-[11px] font-black uppercase tracking-widest text-white bg-[#059669] shadow-lg shadow-[#059669]/20">{t.set}</button>
+              <button onClick={() => setShowTargetModal(false)} className="flex-1 py-6 rounded-3xl text-[10px] font-black uppercase tracking-widest text-[#124559] bg-[#124559]/5 hover:bg-[#124559]/10 transition-colors">{t.cancel}</button>
+              <button onClick={handleSetTarget} className="flex-1 py-6 rounded-3xl text-[10px] font-black uppercase tracking-widest text-white bg-[#059669] shadow-xl shadow-[#059669]/20 hover:bg-[#047857] transition-colors">{t.set}</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Sidebar Settings */}
       {showSidebar && (
-        <div className="fixed inset-0 z-[100] flex justify-end bg-black/10 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="w-full max-w-xs h-full bg-white p-12 shadow-2xl relative animate-in slide-in-from-right duration-500">
-            <button onClick={() => setShowSidebar(false)} className="absolute top-8 right-8 w-10 h-10 rounded-full bg-black/5 flex items-center justify-center">✕</button>
-            <div className="space-y-12">
-              <div className="space-y-2">
-                <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30">{t.appName}</span>
-                <h3 className="text-2xl font-black text-[#124559]">Settings</h3>
+        <div className="fixed inset-0 z-[100] flex justify-end bg-black/5 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="w-full max-w-xs h-full bg-white p-14 shadow-2xl relative animate-in slide-in-from-right duration-500">
+            <button onClick={() => setShowSidebar(false)} className="absolute top-10 right-10 w-12 h-12 rounded-full bg-black/5 flex items-center justify-center hover:bg-black/10 transition-colors">✕</button>
+            <div className="space-y-16">
+              <div className="space-y-3">
+                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#059669] opacity-40">{t.appName}</span>
+                <h3 className="text-3xl font-black text-[#124559] tracking-tighter">{t.settings}</h3>
               </div>
-              <div className="space-y-4">
-                <p className="text-sm font-bold text-[#124559] break-all">{session.user.email}</p>
-                <button onClick={handleLogout} className="w-full py-4 rounded-xl text-[10px] font-black uppercase tracking-widest bg-red-50 text-red-600 hover:bg-red-100 transition-all">{t.logout}</button>
+              <div className="space-y-8">
+                 <div className="p-8 rounded-[3rem] bg-[#124559]/5 space-y-4">
+                   <h4 className="text-[10px] font-black uppercase tracking-widest text-[#124559] opacity-40">Persistence</h4>
+                   <p className="text-sm font-medium text-[#124559] leading-relaxed">Your journey is saved automatically on this device.</p>
+                 </div>
               </div>
-              <div className="pt-12 border-t border-black/[0.05] space-y-2">
+              <div className="pt-16 border-t border-black/[0.03] space-y-3">
                 <p className="text-sm font-bold text-[#124559]">{t.madeBy}</p>
-                <p className="text-[10px] font-medium opacity-40">Version 2.0 Stable</p>
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-20">Version 3.0 Stable</p>
               </div>
             </div>
           </div>
