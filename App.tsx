@@ -10,7 +10,7 @@ const translations = {
     appName: "Istighfar Tracker",
     welcome: "Welcome to Istighfar Tracker",
     instruction: "Tap the circle to begin your remembrance. Seek forgiveness with a present heart.",
-    progressToday: "Progress Today",
+    progressToday: "Daily Total",
     setTarget: "Set Target",
     roadmap: "Roadmap",
     insights: "Insights",
@@ -25,7 +25,7 @@ const translations = {
     benefits: "Spiritual Reflection",
     madeBy: "Made by Adnan Khan",
     recite: "Recite",
-    reset: "Reset",
+    reset: "Clear",
     adjust: "Adjust",
     navHome: "Home",
     navPlanner: "Planner",
@@ -40,7 +40,7 @@ const translations = {
     appName: "ইস্তিগফার ট্র্যাকার",
     welcome: "ইস্তিগফার ট্র্যাকারে আপনাকে স্বাগতম",
     instruction: "আপনার জিকির শুরু করতে বৃত্তটিতে স্পর্শ করুন। একাগ্রচিত্তে ক্ষমা প্রার্থনা করুন।",
-    progressToday: "আজকের অগ্রগতি",
+    progressToday: "আজকের মোট",
     setTarget: "লক্ষ্য নির্ধারণ",
     roadmap: "পরিকল্পনা",
     insights: "পরিসংখ্যান",
@@ -55,7 +55,7 @@ const translations = {
     benefits: "আধ্যাত্মিক প্রতিফলন",
     madeBy: "আদনান খান দ্বারা তৈরি",
     recite: "পাঠ করুন",
-    reset: "রিসেট",
+    reset: "মুছুন",
     adjust: "সমন্বয়",
     navHome: "হোম",
     navPlanner: "পরিকল্পক",
@@ -152,6 +152,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleCountChange = (newCount: number) => {
+    // Play sound if we are increasing
     if (newCount > state.todayCount) playPing();
     
     const today = getTodayStr();
@@ -364,7 +365,7 @@ const App: React.FC = () => {
       {/* Target Modal */}
       {showTargetModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/10 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="w-full max-w-sm bg-white rounded-[4rem] p-12 shadow-2xl space-y-10 animate-in zoom-in duration-300">
+          <div className="w-full max-sm bg-white rounded-[4rem] p-12 shadow-2xl space-y-10 animate-in zoom-in duration-300">
             <div className="space-y-2">
               <span className="text-[10px] font-black uppercase tracking-widest opacity-30">{new Date(selectedDate).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</span>
               <h3 className="text-3xl font-black text-[#124559] tracking-tighter">{t.setTarget}</h3>
