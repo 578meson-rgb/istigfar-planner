@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AppState, LogEntry, View, PlannedTarget, Language } from './types';
 import { fetchDailyContent, LocalizedDailyContent } from './services/geminiService';
@@ -143,7 +142,7 @@ const App: React.FC = () => {
       osc.frequency.exponentialRampToValueToTime(440, ctx.currentTime + 0.3);
       gain.gain.setValueAtTime(0, ctx.currentTime);
       gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      gain.gain.exponentialRampToValueToTime(0.01, ctx.currentTime + 0.3);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
@@ -152,7 +151,6 @@ const App: React.FC = () => {
   }, []);
 
   const handleCountChange = (newCount: number) => {
-    // Play sound if we are increasing
     if (newCount > state.todayCount) playPing();
     
     const today = getTodayStr();
@@ -248,7 +246,6 @@ const App: React.FC = () => {
       <main className="relative z-10 pt-40 pb-44 px-6 flex flex-col items-center max-w-lg mx-auto">
         {state.currentView === 'home' && (
           <div className="flex flex-col items-center space-y-12 animate-in fade-in slide-in-from-bottom-6 duration-1000 w-full">
-            {/* App Header Info */}
             <div className="text-center space-y-3 w-full px-4">
               <h2 className="text-4xl md:text-5xl font-black text-[#124559] tracking-tighter leading-tight">
                 {t.welcome}
@@ -365,7 +362,7 @@ const App: React.FC = () => {
       {/* Target Modal */}
       {showTargetModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/10 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="w-full max-sm bg-white rounded-[4rem] p-12 shadow-2xl space-y-10 animate-in zoom-in duration-300">
+          <div className="w-full max-w-sm bg-white rounded-[4rem] p-12 shadow-2xl space-y-10 animate-in zoom-in duration-300">
             <div className="space-y-2">
               <span className="text-[10px] font-black uppercase tracking-widest opacity-30">{new Date(selectedDate).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</span>
               <h3 className="text-3xl font-black text-[#124559] tracking-tighter">{t.setTarget}</h3>

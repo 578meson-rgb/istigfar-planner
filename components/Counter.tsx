@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 
 interface CounterProps {
@@ -15,12 +14,10 @@ const Counter: React.FC<CounterProps> = ({ count, onCountChange, labels }) => {
   const [sessionCount, setSessionCount] = useState(0);
   const [pulse, setPulse] = useState(false);
 
-  // If the total count is externally reset (e.g. from App), 
-  // we might want the session to reflect that. 
-  // However, usually, we want session to be independent.
+  // If the total count is externally reset to zero, reset session too.
   useEffect(() => {
     if (count === 0) setSessionCount(0);
-  }, [count === 0]);
+  }, [count]);
 
   const handleIncrement = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -78,10 +75,8 @@ const Counter: React.FC<CounterProps> = ({ count, onCountChange, labels }) => {
           group
         `}
       >
-        {/* Shine Overlay */}
         <div className="absolute top-4 left-1/4 w-1/2 h-1/4 bg-gradient-to-b from-white/10 to-transparent rounded-full blur-lg"></div>
         
-        {/* Number Display */}
         <div className="text-center relative z-20 pointer-events-none">
           <span className={`block text-[10px] font-black font-outfit tracking-[0.4em] uppercase mb-4 transition-opacity ${pulse ? 'opacity-50' : 'opacity-40'} text-white`}>
             Session
@@ -92,7 +87,6 @@ const Counter: React.FC<CounterProps> = ({ count, onCountChange, labels }) => {
         </div>
       </div>
 
-      {/* Manual Step Controls (+1 and -1) */}
       <div className="flex items-center justify-center space-x-6 w-full animate-in fade-in slide-in-from-top-4 duration-700 delay-300">
         <button 
           onClick={handleDecrement}
@@ -110,7 +104,6 @@ const Counter: React.FC<CounterProps> = ({ count, onCountChange, labels }) => {
         </button>
       </div>
 
-      {/* Bottom Secondary Controls */}
       <div className="flex space-x-12 items-center pt-2">
         <button 
           onClick={handleReset}

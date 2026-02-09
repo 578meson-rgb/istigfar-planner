@@ -1,6 +1,11 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { DailyContent } from "../types";
+
+declare const process: {
+  env: {
+    API_KEY: string;
+  };
+};
 
 const SYSTEM_INSTRUCTION = `
 You are a calm, respectful, and authentic Islamic assistant.
