@@ -86,10 +86,36 @@ const App: React.FC = () => {
   const [showSidebar, setShowSidebar] = useState(false);
   const [targetInput, setTargetInput] = useState('');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [isNavVisible, setIsNavVisible] = useState(false);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const getTodayStr = () => new Date().toISOString().split('T')[0];
   const t = translations[state.language];
+
+  // Handle Scroll Visibility for Nav based on page percentage
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+      if (scrollHeight <= 0) return;
+      
+      const scrollPercentage = window.scrollY / scrollHeight;
+
+      // Show if scrolled down past 55%
+      if (scrollPercentage >= 0.55) {
+        setIsNavVisible(true);
+      } 
+      // Hide if scrolled up past 45% (scrolling from bottom to top)
+      else if (scrollPercentage <= 0.45) {
+        setIsNavVisible(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    // Initial check in case page is short or already scrolled
+    handleScroll();
+    
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Load Initial Data from LocalStorage
   useEffect(() => {
@@ -130,28 +156,36 @@ const App: React.FC = () => {
     localStorage.setItem('istighfar_planned', JSON.stringify(planned));
   };
 
-  const playPing = useCallback(() => {
+  const playTargetBeep = useCallback(() => {
     try {
       if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       const ctx = audioContextRef.current;
       if (ctx.state === 'suspended') ctx.resume();
+      
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
+      
       osc.type = 'sine';
       osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.3);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.5);
+      
       gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+      
       osc.connect(gain);
       gain.connect(ctx.destination);
+      
       osc.start();
-      osc.stop(ctx.currentTime + 0.3);
+      osc.stop(ctx.currentTime + 0.5);
     } catch (e) {}
   }, []);
 
   const handleCountChange = (newCount: number) => {
-    if (newCount > state.todayCount) playPing();
+    // ONLY play sound when target is exactly met
+    if (newCount === state.todayTarget && newCount > 0) {
+      playTargetBeep();
+    }
     
     const today = getTodayStr();
     const updatedLogs = [...state.logs];
@@ -345,8 +379,8 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Floating Bottom Nav */}
-      <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 flex items-center p-2 rounded-full bg-white/80 backdrop-blur-2xl shadow-2xl border border-black/[0.03]">
+      {/* Floating Bottom Nav - Custom scroll-based visibility with hysteresis (55% / 45%) */}
+      <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-50 flex items-center p-2 rounded-full bg-white/80 backdrop-blur-2xl shadow-2xl border border-black/[0.03] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isNavVisible ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
         {[
           { id: 'home', icon: '✦', label: t.navHome },
           { id: 'planner', icon: '◈', label: t.navPlanner },
