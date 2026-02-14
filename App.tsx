@@ -37,7 +37,7 @@ const translations = {
   },
   bn: {
     appName: "ইস্তিগফার ট্র্যাকার",
-    welcome: "ইস্তিগফার ট্র্যাকারে আপনাকে স্বাগতম",
+    welcome: "ইস্তিগফার ট্র্যাকারে আপনাকে স্বাগত",
     instruction: "আপনার জিকির শুরু করতে বৃত্তটিতে স্পর্শ করুন। একাগ্রচিত্তে ক্ষমা প্রার্থনা করুন।",
     progressToday: "আজকের মোট",
     setTarget: "লক্ষ্য নির্ধারণ",
@@ -87,15 +87,20 @@ const App: React.FC = () => {
   const [targetInput, setTargetInput] = useState('');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [isNavVisible, setIsNavVisible] = useState(false);
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const getTodayStr = () => new Date().toISOString().split('T')[0];
   const t = translations[state.language];
 
-  // Handle Scroll Visibility for Nav based on page percentage
+  // Handle Scroll Visibility for both Nav bars
   useEffect(() => {
     const handleScroll = () => {
       const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+      
+      // Top Header Visibility (only show at very top)
+      setIsHeaderVisible(window.scrollY < 20);
+
       if (scrollHeight <= 0) {
         setIsNavVisible(false);
         return;
@@ -103,7 +108,7 @@ const App: React.FC = () => {
       
       const scrollPercentage = window.scrollY / scrollHeight;
 
-      // Show if scrolled down past 50%, hide if above 50%
+      // Bottom Nav Visibility (50% / 50% rule)
       if (scrollPercentage >= 0.5) {
         setIsNavVisible(true);
       } else {
@@ -182,7 +187,6 @@ const App: React.FC = () => {
   }, []);
 
   const handleCountChange = (newCount: number) => {
-    // ONLY play sound when target is exactly met
     if (newCount === state.todayTarget && newCount > 0) {
       playTargetBeep();
     }
@@ -261,7 +265,8 @@ const App: React.FC = () => {
         <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-[#598392]/10 blur-[150px] rounded-full animate-pulse" style={{ animationDelay: '2s' }}></div>
       </div>
 
-      <nav className="fixed top-0 left-0 right-0 z-50 px-8 py-10 flex justify-between items-center bg-[#faf9f6]/80 backdrop-blur-xl border-b border-black/[0.02]">
+      {/* Top Navigation - Auto hides on scroll */}
+      <nav className={`fixed top-0 left-0 right-0 z-50 px-8 py-10 flex justify-between items-center bg-[#faf9f6]/80 backdrop-blur-xl border-b border-black/[0.02] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isHeaderVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'}`}>
         <div className="flex items-center space-x-3">
           <div className="w-2.5 h-2.5 rounded-full bg-[#059669]"></div>
           <h1 className="text-xl font-black tracking-tighter text-[#124559] uppercase">{t.appName}</h1>
@@ -379,7 +384,7 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Floating Bottom Nav - Custom scroll-based visibility with hysteresis (50% / 50%) */}
+      {/* Floating Bottom Nav - Custom scroll-based visibility (50% rule) */}
       <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-50 flex items-center p-2 rounded-full bg-white/80 backdrop-blur-2xl shadow-2xl border border-black/[0.03] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isNavVisible ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
         {[
           { id: 'home', icon: '✦', label: t.navHome },
