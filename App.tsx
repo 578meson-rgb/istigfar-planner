@@ -96,22 +96,22 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleScroll = () => {
       const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
-      if (scrollHeight <= 0) return;
+      if (scrollHeight <= 0) {
+        setIsNavVisible(false);
+        return;
+      }
       
       const scrollPercentage = window.scrollY / scrollHeight;
 
-      // Show if scrolled down past 55%
-      if (scrollPercentage >= 0.55) {
+      // Show if scrolled down past 50%, hide if above 50%
+      if (scrollPercentage >= 0.5) {
         setIsNavVisible(true);
-      } 
-      // Hide if scrolled up past 45% (scrolling from bottom to top)
-      else if (scrollPercentage <= 0.45) {
+      } else {
         setIsNavVisible(false);
       }
     };
 
     window.addEventListener('scroll', handleScroll);
-    // Initial check in case page is short or already scrolled
     handleScroll();
     
     return () => window.removeEventListener('scroll', handleScroll);
@@ -379,7 +379,7 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Floating Bottom Nav - Custom scroll-based visibility with hysteresis (55% / 45%) */}
+      {/* Floating Bottom Nav - Custom scroll-based visibility with hysteresis (50% / 50%) */}
       <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-50 flex items-center p-2 rounded-full bg-white/80 backdrop-blur-2xl shadow-2xl border border-black/[0.03] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isNavVisible ? 'translate-y-0 opacity-100' : 'translate-y-32 opacity-0 pointer-events-none'}`}>
         {[
           { id: 'home', icon: '✦', label: t.navHome },
