@@ -1,5 +1,8 @@
 {
   "name": "Istighfar Tracker",
   "description": "A calm and respectful companion for daily spiritual reflection and tracking Istighfar counts, featuring AI-generated motivation and challenges.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

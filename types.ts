@@ -17,7 +17,7 @@ export interface PlannedTarget {
 }
 
 export type Theme = 'light' | 'dark';
-export type View = 'home' | 'analytics' | 'planner';
+export type View = 'home' | 'analytics' | 'planner' | 'community';
 export type Language = 'en' | 'bn';
 
 export interface AppState {

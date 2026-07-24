@@ -3,6 +3,8 @@ import { AppState, LogEntry, View, PlannedTarget, Language } from './types';
 import { fetchDailyContent, LocalizedDailyContent } from './services/geminiService';
 import Counter from './components/Counter';
 import HistoryChart from './components/HistoryChart';
+import Community from './components/Community';
+import { auth, onAuthStateChanged, User, syncUserDataToFirestore, signInWithGoogle, logoutUser } from './lib/firebase';
 
 const translations = {
   en: {
@@ -29,11 +31,15 @@ const translations = {
     navHome: "Home",
     navPlanner: "Planner",
     navInsights: "Insights",
+    navCommunity: "Community",
     plannerTitle: "Plan Your Journey",
     selectDate: "Select a date to set target",
     refresh: "Refresh Content",
     reflection: "Reflection",
-    settings: "Settings"
+    settings: "Settings",
+    loginWithGoogle: "Sign in with Google",
+    signOut: "Sign Out",
+    account: "Account"
   },
   bn: {
     appName: "ইস্তিগফার ট্র্যাকার",
@@ -59,11 +65,15 @@ const translations = {
     navHome: "হোম",
     navPlanner: "পরিকল্পক",
     navInsights: "পরিসংখ্যান",
+    navCommunity: "কমিউনিটি",
     plannerTitle: "আপনার যাত্রা পরিকল্পনা করুন",
     selectDate: "লক্ষ্য নির্ধারণ করতে একটি তারিখ নির্বাচন করুন",
     refresh: "নতুন তথ্য",
     reflection: "প্রতিফলন",
-    settings: "সেটিংস"
+    settings: "সেটিংস",
+    loginWithGoogle: "গুগল দিয়ে সাইন ইন করুন",
+    signOut: "সাইন আউট",
+    account: "অ্যাকাউন্ট"
   }
 };
 
@@ -82,6 +92,7 @@ const App: React.FC = () => {
     error: null
   });
 
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showTargetModal, setShowTargetModal] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [targetInput, setTargetInput] = useState('');
@@ -92,6 +103,14 @@ const App: React.FC = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const getTodayStr = () => new Date().toISOString().split('T')[0];
   const t = translations[state.language];
+
+  // Subscribe to Firebase Auth State
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Handle Scroll Visibility for both Nav bars
   useEffect(() => {
@@ -203,6 +222,11 @@ const App: React.FC = () => {
 
     setState(prev => ({ ...prev, todayCount: newCount, logs: updatedLogs }));
     saveStateToLocal(updatedLogs, state.plannedTargets);
+
+    if (currentUser) {
+      const tot = updatedLogs.reduce((acc, curr) => acc + curr.count, 0);
+      syncUserDataToFirestore(currentUser, newCount, tot, today);
+    }
   };
 
   const handleSetTarget = () => {
@@ -382,6 +406,16 @@ const App: React.FC = () => {
             <HistoryChart data={state.logs} />
           </div>
         )}
+
+        {state.currentView === 'community' && (
+          <Community 
+            currentUser={currentUser}
+            language={state.language}
+            todayCount={state.todayCount}
+            totalCount={totalCount}
+            todayDate={getTodayStr()}
+          />
+        )}
       </main>
 
       {/* Floating Bottom Nav - Custom scroll-based visibility (50% rule) */}
@@ -389,11 +423,12 @@ const App: React.FC = () => {
         {[
           { id: 'home', icon: '✦', label: t.navHome },
           { id: 'planner', icon: '◈', label: t.navPlanner },
-          { id: 'analytics', icon: '◉', label: t.navInsights }
+          { id: 'analytics', icon: '◉', label: t.navInsights },
+          { id: 'community', icon: '👥', label: t.navCommunity }
         ].map((item) => (
-          <button key={item.id} onClick={() => setState(prev => ({ ...prev, currentView: item.id as View }))} className={`flex items-center space-x-3 px-8 py-4 rounded-full transition-all active:scale-95 ${state.currentView === item.id ? 'bg-[#124559] text-white shadow-lg shadow-[#124559]/20' : 'text-[#124559]/40 hover:text-[#124559]'}`}>
-            <span className="text-xl">{item.icon}</span>
-            {state.currentView === item.id && <span className="text-[10px] font-black uppercase tracking-[0.2em]">{item.label}</span>}
+          <button key={item.id} onClick={() => setState(prev => ({ ...prev, currentView: item.id as View }))} className={`flex items-center space-x-2 px-5 py-3.5 rounded-full transition-all active:scale-95 ${state.currentView === item.id ? 'bg-[#124559] text-white shadow-lg shadow-[#124559]/20' : 'text-[#124559]/40 hover:text-[#124559]'}`}>
+            <span className="text-lg">{item.icon}</span>
+            {state.currentView === item.id && <span className="text-[10px] font-black uppercase tracking-[0.15em]">{item.label}</span>}
           </button>
         ))}
       </div>
@@ -418,22 +453,72 @@ const App: React.FC = () => {
       {/* Sidebar Settings */}
       {showSidebar && (
         <div className="fixed inset-0 z-[100] flex justify-end bg-black/5 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="w-full max-w-xs h-full bg-white p-14 shadow-2xl relative animate-in slide-in-from-right duration-500">
+          <div className="w-full max-w-xs h-full bg-white p-10 md:p-14 shadow-2xl relative animate-in slide-in-from-right duration-500 overflow-y-auto">
             <button onClick={() => setShowSidebar(false)} className="absolute top-10 right-10 w-12 h-12 rounded-full bg-black/5 flex items-center justify-center hover:bg-black/10 transition-colors">✕</button>
-            <div className="space-y-16">
+            <div className="space-y-12">
               <div className="space-y-3">
                 <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#059669] opacity-40">{t.appName}</span>
                 <h3 className="text-3xl font-black text-[#124559] tracking-tighter">{t.settings}</h3>
               </div>
-              <div className="space-y-8">
+
+              {/* Account Section */}
+              <div className="space-y-4 pt-2 border-t border-black/[0.04]">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-[#124559] opacity-40">{t.account}</h4>
+                {currentUser ? (
+                  <div className="p-6 rounded-[2.5rem] bg-[#059669]/5 space-y-4">
+                    <div className="flex items-center space-x-3">
+                      {currentUser.photoURL ? (
+                        <img src={currentUser.photoURL} alt={currentUser.displayName || ''} className="w-10 h-10 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-[#124559] text-white flex items-center justify-center font-bold text-sm">
+                          {(currentUser.displayName || 'U')[0]}
+                        </div>
+                      )}
+                      <div className="overflow-hidden">
+                        <p className="text-xs font-bold text-[#124559] truncate">{currentUser.displayName || 'User'}</p>
+                        <p className="text-[10px] text-[#124559]/60 truncate">{currentUser.email}</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => { logoutUser(); setShowSidebar(false); }}
+                      className="w-full py-3 rounded-2xl bg-red-50 text-red-600 font-black text-[10px] uppercase tracking-widest hover:bg-red-100 transition-colors"
+                    >
+                      {t.signOut}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-6 rounded-[2.5rem] bg-[#124559]/5 space-y-4">
+                    <p className="text-xs font-medium text-[#124559]/80 leading-relaxed">
+                      Sign in with Google to view other reciters and sync your progress with Firebase database.
+                    </p>
+                    <button 
+                      onClick={async () => {
+                        try {
+                          await signInWithGoogle();
+                          setShowSidebar(false);
+                          setState(prev => ({ ...prev, currentView: 'community' }));
+                        } catch (e) {}
+                      }}
+                      className="w-full py-4 rounded-2xl bg-[#124559] text-white font-black text-[10px] uppercase tracking-widest hover:bg-[#064e3b] transition-all shadow-md shadow-[#124559]/10"
+                    >
+                      {t.loginWithGoogle}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-8 pt-2 border-t border-black/[0.04]">
                  <div className="p-8 rounded-[3rem] bg-[#124559]/5 space-y-4">
                    <h4 className="text-[10px] font-black uppercase tracking-widest text-[#124559] opacity-40">Persistence</h4>
-                   <p className="text-sm font-medium text-[#124559] leading-relaxed">Your journey is saved automatically on this device.</p>
+                   <p className="text-sm font-medium text-[#124559] leading-relaxed">
+                     {currentUser ? "Synced to Cloud Firestore Database" : "Saved locally in browser cache"}
+                   </p>
                  </div>
               </div>
-              <div className="pt-16 border-t border-black/[0.03] space-y-3">
+
+              <div className="pt-10 border-t border-black/[0.03] space-y-3">
                 <p className="text-sm font-bold text-[#124559]">{t.madeBy}</p>
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-20">Version 3.0 Stable</p>
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-20">Version 3.0 Cloud Edition</p>
               </div>
             </div>
           </div>
