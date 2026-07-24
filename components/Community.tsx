@@ -1,18 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  User, 
-  signInWithGoogle, 
-  logoutUser, 
   subscribeToCommunityUsers, 
   UserProfile, 
-  syncUserDataToFirestore 
+  syncUserDataToFirestore,
+  clearAllCommunityDataFromFirestore
 } from '../lib/firebase';
 import { Language } from '../types';
 
 interface CommunityProps {
-  currentUser: User | null;
-  guestUser: { uid: string; displayName: string; photoURL?: string } | null;
-  onSetGuestUser: (guest: { uid: string; displayName: string; photoURL?: string } | null) => void;
+  reciterProfile: { uid: string; displayName: string } | null;
+  onSetReciterProfile: (profile: { uid: string; displayName: string } | null) => void;
   language: Language;
   todayCount: number;
   totalCount: number;
@@ -22,70 +19,55 @@ interface CommunityProps {
 const communityTranslations = {
   en: {
     title: "Community Database",
-    subtitle: "Connect with reciters worldwide and view global Istighfar progress.",
-    loginPromptTitle: "Join Community Database",
-    loginPromptDesc: "Istighfar Tracker saves your personal count locally in your browser cache. To feature your count in the global database and see other reciters, please sign in.",
-    signInBtn: "Sign in with Google",
-    signOutBtn: "Sign Out",
+    subtitle: "Connect with reciters worldwide and view global Istighfar progress in real-time.",
+    joinTitle: "Join Live Community Database",
+    joinDesc: "Enter your name to feature your recitations in the global database. No passwords required!",
+    enterName: "Enter your reciter name (e.g. Adnan)",
+    joinBtn: "Join Community",
+    profileTitle: "Your Reciter Profile",
+    changeName: "Edit Name",
+    leaveCommunity: "Disconnect Profile",
     globalTotal: "Global Istighfars",
     todayGlobal: "Today's Global Total",
     activeReciters: "Active Reciters",
     reciterListTitle: "Top Reciters & Community Members",
     searchPlaceholder: "Search reciter by name...",
     mashaAllah: "MashaAllah",
-    syncedBadge: "Cloud Synced",
-    guestNotice: "Using offline browser cache",
-    noUsersFound: "No reciters found matching search.",
+    syncedBadge: "Live Database Synced",
+    noUsersFound: "No reciters found in database.",
     todayLabel: "Today",
     totalLabel: "Total",
-    domainErrorTitle: "Firebase Authorized Domain Setup Required",
-    domainErrorDesc: "Firebase OAuth requires your application domain to be authorized in the Firebase Console.",
-    copyDomain: "Copy Domain Name",
-    copied: "Copied!",
-    openConsole: "Open Firebase Console Settings",
-    domainInstructions: "Steps: 1. Click 'Open Firebase Console Settings' -> 2. Under 'Authorized domains', click 'Add domain' -> 3. Paste the domain below:",
-    guestFallbackTitle: "Or Join with Guest Name",
-    guestFallbackDesc: "You can also set a display name to post your counts to the live database immediately:",
-    enterName: "Enter your name...",
-    joinGuestBtn: "Join Community",
-    switchUser: "Switch Profile"
+    resetDbBtn: "Clear Database & Start Fresh",
+    confirmReset: "Are you sure you want to delete all entries and reset the community database to zero?"
   },
   bn: {
     title: "কমিউনিটি ডাটাবেস",
-    subtitle: "বিশ্বজুড়ে অন্যান্য রেসিটারদের সাথে যুক্ত হন এবং গ্লোবাল ইস্তিগফার দেখুন।",
-    loginPromptTitle: "কমিউনিটি ডাটাবেসে যোগ দিন",
-    loginPromptDesc: "ইস্তিগফার ট্র্যাকার আপনার ব্যক্তিগত গণনা ব্রাউজার ক্যাশে সংরক্ষণ করে। গ্লোবাল ডাটাবেসে যুক্ত হতে এবং অন্যান্য রেসিটারদের দেখতে সাইন ইন করুন।",
-    signInBtn: "গুগল দিয়ে সাইন ইন করুন",
-    signOutBtn: "সাইন আউট",
+    subtitle: "বিশ্বজুড়ে অন্যান্য রেসিটারদের সাথে যুক্ত হন এবং রিয়েল-টাইমে গ্লোবাল ইস্তিগফার দেখুন।",
+    joinTitle: "লাইভ কমিউনিটি ডাটাবেসে যোগ দিন",
+    joinDesc: "গ্লোবাল ডাটাবেসে আপনার জিকির যুক্ত করতে নাম লিখুন। কোনো পাসওয়ার্ডের প্রয়োজন নেই!",
+    enterName: "আপনার নাম লিখুন (যেমন: আদনান)",
+    joinBtn: "কমিউনিটিতে যোগ দিন",
+    profileTitle: "আপনার প্রোফাইল",
+    changeName: "নাম পরিবর্তন",
+    leaveCommunity: "প্রোফাইল সরান",
     globalTotal: "সর্বমোট গ্লোবাল ইস্তিগফার",
     todayGlobal: "আজকের গ্লোবাল মোট",
     activeReciters: "সক্রিয় সদস্য",
     reciterListTitle: "শীর্ষ রেসিটার এবং কমিউনিটি সদস্যবৃন্দ",
     searchPlaceholder: "নাম দিয়ে সদস্য খুঁজুন...",
     mashaAllah: "মাশাআল্লাহ",
-    syncedBadge: "ক্লাউড সিঙ্কড",
-    guestNotice: "অফলাইন ব্রাউজার ক্যাশে ব্যবহৃত হচ্ছে",
+    syncedBadge: "লাইভ ডাটাবেস সিঙ্কড",
     noUsersFound: "কোন সদস্য পাওয়া যায়নি।",
     todayLabel: "আজ",
     totalLabel: "মোট",
-    domainErrorTitle: "ফায়ারবেস অথরাইজড ডোমেইন সেটআপ প্রয়োজন",
-    domainErrorDesc: "ফায়ারবেস গুগল লগইনের জন্য আপনার অ্যাপের ডোমেইনটি ফায়ারবেস কনসোলে অনুমোদিত করতে হবে।",
-    copyDomain: "ডোমেইন নাম কপি করুন",
-    copied: "কপি হয়েছে!",
-    openConsole: "ফায়ারবেস কনসোল খুলুন",
-    domainInstructions: "ধাপ: ১. 'ফায়ারবেস কনসোল খুলুন' এ যান -> ২. 'Authorized domains' এ 'Add domain' চাপুন -> ৩. নিচের ডোমেইনটি পেস্ট করুন:",
-    guestFallbackTitle: "অথবা নাম দিয়ে এখনই যোগ দিন",
-    guestFallbackDesc: "আপনি একটি ডিসপ্লে নাম সেট করে সরাসরি লাইভ ডাটাবেসে যুক্ত হতে পারেন:",
-    enterName: "আপনার নাম লিখুন...",
-    joinGuestBtn: "কমিউনিটিতে যোগ দিন",
-    switchUser: "প্রোফাইল পরিবর্তন"
+    resetDbBtn: "ডাটাবেস সম্পূর্ণ রিসেট করুন",
+    confirmReset: "আপনি কি নিশ্চিত যে সকল পুরাতন এন্ট্রি মুছে ফেলে ডাটাবেস নতুন করে শুরু করতে চান?"
   }
 };
 
 const Community: React.FC<CommunityProps> = ({
-  currentUser,
-  guestUser,
-  onSetGuestUser,
+  reciterProfile,
+  onSetReciterProfile,
   language,
   todayCount,
   totalCount,
@@ -93,15 +75,12 @@ const Community: React.FC<CommunityProps> = ({
 }) => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [domainError, setDomainError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [guestNameInput, setGuestNameInput] = useState('');
+  const [nameInput, setNameInput] = useState('');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [mashaallahCounts, setMashaallahCounts] = useState<{ [uid: string]: number }>({});
 
   const t = communityTranslations[language];
-  const activeUser = currentUser || guestUser;
-  const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
 
   // Subscribe to live community users snapshot from Firestore
   useEffect(() => {
@@ -113,55 +92,52 @@ const Community: React.FC<CommunityProps> = ({
 
   // Sync active user profile & count to Firestore
   useEffect(() => {
-    if (activeUser) {
-      syncUserDataToFirestore(activeUser, todayCount, totalCount, todayDate);
+    if (reciterProfile) {
+      syncUserDataToFirestore(reciterProfile, todayCount, totalCount, todayDate);
     }
-  }, [activeUser, todayCount, totalCount, todayDate]);
+  }, [reciterProfile, todayCount, totalCount, todayDate]);
 
-  const handleGoogleSignIn = async () => {
-    setIsLoggingIn(true);
-    setDomainError(null);
-    try {
-      const user = await signInWithGoogle();
-      if (user) {
-        onSetGuestUser(null);
-        await syncUserDataToFirestore(user, todayCount, totalCount, todayDate);
-      }
-    } catch (err: any) {
-      console.error("Login failed:", err);
-      if (err?.code === 'auth/unauthorized-domain' || (err?.message && err.message.includes('unauthorized-domain'))) {
-        setDomainError(err.message || 'auth/unauthorized-domain');
-      } else {
-        alert("Failed to sign in with Google: " + (err?.message || "Unknown error"));
-      }
-    } finally {
-      setIsLoggingIn(false);
+  // Helper function to create deterministic ID from name to prevent duplicate rows for the same user
+  const createDeterministicUid = (name: string) => {
+    const clean = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/gi, '');
+    if (clean.length > 0) {
+      return `reciter_${clean}`;
     }
+    // Fallback for non-ASCII (e.g. Bangla characters)
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = (hash << 5) - hash + name.charCodeAt(i);
+      hash |= 0;
+    }
+    return `reciter_bn_${Math.abs(hash)}`;
   };
 
-  const handleCreateGuestProfile = (e: React.FormEvent) => {
+  const handleJoinCommunity = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!guestNameInput.trim()) return;
-    const newGuest = {
-      uid: 'guest_' + Math.random().toString(36).substr(2, 9),
-      displayName: guestNameInput.trim(),
-      photoURL: ''
+    if (!nameInput.trim()) return;
+
+    const deterministicUid = createDeterministicUid(nameInput);
+    const newProfile = {
+      uid: deterministicUid,
+      displayName: nameInput.trim()
     };
-    onSetGuestUser(newGuest);
-    syncUserDataToFirestore(newGuest, todayCount, totalCount, todayDate);
+
+    onSetReciterProfile(newProfile);
+    setIsEditingName(false);
+    setNameInput('');
+    syncUserDataToFirestore(newProfile, todayCount, totalCount, todayDate);
   };
 
-  const handleSignOut = async () => {
-    if (currentUser) {
-      await logoutUser();
+  const handleResetDatabase = async () => {
+    if (window.confirm(t.confirmReset)) {
+      setIsClearing(true);
+      await clearAllCommunityDataFromFirestore();
+      setUsers([]);
+      if (reciterProfile) {
+        await syncUserDataToFirestore(reciterProfile, todayCount, totalCount, todayDate);
+      }
+      setIsClearing(false);
     }
-    onSetGuestUser(null);
-  };
-
-  const copyDomainToClipboard = () => {
-    navigator.clipboard.writeText(currentDomain);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleMashaAllahClick = (uid: string) => {
@@ -172,16 +148,30 @@ const Community: React.FC<CommunityProps> = ({
     if ('vibrate' in navigator) navigator.vibrate(15);
   };
 
-  // Compute community stats
-  const aggregateGlobalTotal = users.reduce((acc, u) => acc + (u.totalCount || 0), 0);
-  const aggregateTodayTotal = users.reduce((acc, u) => acc + (u.todayCount || 0), 0);
+  // Deduplicate users by clean lowercase display name or UID so duplicate legacy rows never show up
+  const uniqueUsersMap = new Map<string, UserProfile>();
+  users.forEach(u => {
+    const key = (u.displayName || '').trim().toLowerCase();
+    if (!key) return;
+    const existing = uniqueUsersMap.get(key);
+    const isCurrentActive = reciterProfile && u.uid === reciterProfile.uid;
+    if (!existing || isCurrentActive || (u.totalCount || 0) > (existing.totalCount || 0)) {
+      uniqueUsersMap.set(key, u);
+    }
+  });
 
-  const filteredUsers = users.filter(u => 
+  const deduplicatedUsers = Array.from(uniqueUsersMap.values()).sort((a, b) => (b.totalCount || 0) - (a.totalCount || 0));
+
+  // Compute aggregate stats from real-time Firestore database
+  const aggregateGlobalTotal = deduplicatedUsers.reduce((acc, u) => acc + (u.totalCount || 0), 0);
+  const aggregateTodayTotal = deduplicatedUsers.reduce((acc, u) => acc + (u.todayCount || 0), 0);
+
+  const filteredUsers = deduplicatedUsers.filter(u => 
     (u.displayName || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
-    <div className="w-full space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700">
+    <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
       {/* Title */}
       <div className="text-center space-y-3 px-4">
         <h2 className="text-4xl md:text-5xl font-black text-[#124559] tracking-tighter leading-tight">
@@ -217,125 +207,71 @@ const Community: React.FC<CommunityProps> = ({
             {t.activeReciters}
           </span>
           <span className="text-3xl font-black tracking-tight block">
-            {users.length}
+            {deduplicatedUsers.length}
           </span>
         </div>
       </div>
 
-      {/* Account Login / Setup Card if not authenticated */}
-      {!activeUser && (
-        <div className="w-full p-8 md:p-12 rounded-[3.5rem] bg-white border border-black/[0.04] shadow-xl space-y-8 text-center relative overflow-hidden">
-          <div className="w-16 h-16 bg-[#124559]/5 rounded-3xl flex items-center justify-center mx-auto text-3xl">
-            👥
+      {/* Profile / Join Card */}
+      {!reciterProfile || isEditingName ? (
+        <div className="p-8 md:p-10 rounded-[3rem] bg-white border border-black/[0.04] shadow-xl space-y-6 text-center">
+          <div className="w-14 h-14 bg-[#059669]/10 rounded-2xl flex items-center justify-center mx-auto text-2xl">
+            ✨
           </div>
 
-          <div className="space-y-3 max-w-md mx-auto">
+          <div className="space-y-2 max-w-md mx-auto">
             <h3 className="text-2xl font-black text-[#124559] tracking-tight">
-              {t.loginPromptTitle}
+              {t.joinTitle}
             </h3>
             <p className="text-xs font-medium text-[#124559]/70 leading-relaxed">
-              {t.loginPromptDesc}
+              {t.joinDesc}
             </p>
           </div>
 
-          <div className="pt-2 flex flex-col items-center justify-center space-y-4">
-            <button
-              onClick={handleGoogleSignIn}
-              disabled={isLoggingIn}
-              className="inline-flex items-center space-x-4 bg-[#124559] text-white px-8 py-5 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-[#064e3b] active:scale-95 transition-all shadow-xl shadow-[#124559]/20 disabled:opacity-50"
-            >
-              <svg className="w-5 h-5 bg-white rounded-full p-0.5" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-              </svg>
-              <span>{isLoggingIn ? 'Connecting...' : t.signInBtn}</span>
-            </button>
-          </div>
-
-          {/* Domain Error Notice & Step-by-Step Fix */}
-          {domainError && (
-            <div className="p-6 rounded-3xl bg-amber-50 border border-amber-200 text-left space-y-4 max-w-lg mx-auto">
-              <div className="flex items-center space-x-3 text-amber-800 font-bold text-sm">
-                <span>⚠️</span>
-                <span>{t.domainErrorTitle}</span>
-              </div>
-              <p className="text-xs text-amber-900/80 leading-relaxed">
-                {t.domainErrorDesc}
-              </p>
-              
-              <div className="p-3 bg-white rounded-xl border border-amber-200 flex items-center justify-between">
-                <span className="text-[11px] font-mono text-slate-800 truncate mr-2">
-                  {currentDomain}
-                </span>
-                <button
-                  onClick={copyDomainToClipboard}
-                  className="px-3 py-1.5 rounded-lg bg-amber-600 text-white font-bold text-[10px] uppercase tracking-wider hover:bg-amber-700 transition-colors shrink-0"
+          <form onSubmit={handleJoinCommunity} className="max-w-md mx-auto space-y-3">
+            <input 
+              type="text" 
+              required
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              placeholder={reciterProfile?.displayName || t.enterName}
+              className="w-full px-6 py-4 rounded-2xl bg-gray-50 border border-black/10 text-sm font-bold text-[#124559] focus:outline-none focus:ring-2 focus:ring-[#059669]/30 text-center"
+            />
+            <div className="flex space-x-3">
+              {isEditingName && (
+                <button 
+                  type="button"
+                  onClick={() => setIsEditingName(false)}
+                  className="flex-1 py-4 rounded-2xl bg-gray-100 text-[#124559] font-black text-xs uppercase tracking-wider"
                 >
-                  {copied ? t.copied : t.copyDomain}
+                  Cancel
                 </button>
-              </div>
-
-              <p className="text-[11px] font-medium text-amber-900/70">
-                {t.domainInstructions}
-              </p>
-
-              <a
-                href="https://console.firebase.google.com/project/gen-lang-client-0696360944/authentication/settings"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-block w-full text-center py-3 rounded-2xl bg-amber-700 text-white font-black text-[11px] uppercase tracking-widest hover:bg-amber-800 transition-colors"
-              >
-                {t.openConsole} ↗
-              </a>
-            </div>
-          )}
-
-          {/* Guest Name Fallback */}
-          <div className="pt-6 border-t border-black/[0.04] max-w-sm mx-auto space-y-4">
-            <div className="space-y-1">
-              <h4 className="text-sm font-bold text-[#124559]">{t.guestFallbackTitle}</h4>
-              <p className="text-[11px] text-[#124559]/60">{t.guestFallbackDesc}</p>
-            </div>
-            <form onSubmit={handleCreateGuestProfile} className="flex space-x-2">
-              <input 
-                type="text" 
-                value={guestNameInput}
-                onChange={(e) => setGuestNameInput(e.target.value)}
-                placeholder={t.enterName}
-                className="flex-1 px-4 py-3 rounded-2xl bg-gray-50 border border-black/10 text-xs font-bold text-[#124559] focus:outline-none focus:ring-2 focus:ring-[#059669]/30"
-              />
+              )}
               <button 
                 type="submit"
-                className="px-5 py-3 rounded-2xl bg-[#059669] text-white font-black text-[10px] uppercase tracking-wider hover:bg-[#047857] transition-colors"
+                className="flex-1 py-4 rounded-2xl bg-[#059669] text-white font-black text-xs uppercase tracking-widest hover:bg-[#047857] transition-all shadow-lg shadow-[#059669]/20"
               >
-                {t.joinGuestBtn}
+                {t.joinBtn}
               </button>
-            </form>
-          </div>
+            </div>
+          </form>
         </div>
-      )}
-
-      {/* Profile Bar if authenticated or guest */}
-      {activeUser && (
-        <div className="p-6 rounded-[2.5rem] bg-white border border-black/[0.04] shadow-sm flex items-center justify-between">
+      ) : (
+        /* Joined Profile Active Bar */
+        <div className="p-6 rounded-[2.5rem] bg-white border border-[#059669]/20 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
-            {activeUser.photoURL ? (
-              <img 
-                src={activeUser.photoURL} 
-                alt={activeUser.displayName || 'User'} 
-                className="w-12 h-12 rounded-full border-2 border-[#059669] object-cover"
-              />
-            ) : (
-              <div className="w-12 h-12 rounded-full bg-[#124559] text-white flex items-center justify-center font-black text-lg">
-                {(activeUser.displayName || 'U')[0].toUpperCase()}
-              </div>
-            )}
+            <div className="w-12 h-12 rounded-full bg-[#124559] text-white flex items-center justify-center font-black text-lg">
+              {reciterProfile.displayName[0].toUpperCase()}
+            </div>
             <div>
-              <h4 className="font-bold text-[#124559] text-base leading-tight">
-                {activeUser.displayName || 'Reciter'}
-              </h4>
+              <div className="flex items-center space-x-2">
+                <h4 className="font-bold text-[#124559] text-base leading-tight">
+                  {reciterProfile.displayName}
+                </h4>
+                <span className="text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full bg-[#059669]/10 text-[#059669]">
+                  You
+                </span>
+              </div>
               <div className="flex items-center space-x-2 mt-1">
                 <span className="w-2 h-2 rounded-full bg-[#059669] animate-ping"></span>
                 <span className="text-[10px] font-black uppercase tracking-wider text-[#059669]">
@@ -345,12 +281,23 @@ const Community: React.FC<CommunityProps> = ({
             </div>
           </div>
 
-          <button 
-            onClick={handleSignOut}
-            className="px-5 py-2.5 rounded-full bg-red-50 text-red-600 font-black text-[10px] uppercase tracking-widest hover:bg-red-100 transition-colors"
-          >
-            {t.signOutBtn}
-          </button>
+          <div className="flex items-center space-x-3">
+            <button 
+              onClick={() => {
+                setNameInput(reciterProfile.displayName);
+                setIsEditingName(true);
+              }}
+              className="px-4 py-2 rounded-full bg-[#124559]/5 hover:bg-[#124559]/10 text-[#124559] font-bold text-xs transition-colors"
+            >
+              ✏️ {t.changeName}
+            </button>
+            <button 
+              onClick={() => onSetReciterProfile(null)}
+              className="px-4 py-2 rounded-full bg-red-50 text-red-600 font-bold text-xs hover:bg-red-100 transition-colors"
+            >
+              {t.leaveCommunity}
+            </button>
+          </div>
         </div>
       )}
 
@@ -360,13 +307,23 @@ const Community: React.FC<CommunityProps> = ({
           <h3 className="text-xl font-black text-[#124559] tracking-tight">
             {t.reciterListTitle}
           </h3>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t.searchPlaceholder}
-            className="px-5 py-3 rounded-2xl bg-white border border-black/[0.05] text-xs font-medium text-[#124559] focus:outline-none focus:ring-2 focus:ring-[#059669]/30 w-full md:w-60"
-          />
+          <div className="flex items-center space-x-3 w-full md:w-auto">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t.searchPlaceholder}
+              className="px-5 py-3 rounded-2xl bg-white border border-black/[0.05] text-xs font-medium text-[#124559] focus:outline-none focus:ring-2 focus:ring-[#059669]/30 flex-1 md:w-60"
+            />
+            <button
+              onClick={handleResetDatabase}
+              disabled={isClearing}
+              title="Clear all old database entries to start fresh"
+              className="px-4 py-3 rounded-2xl bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 font-bold text-[11px] whitespace-nowrap transition-colors shrink-0 disabled:opacity-50"
+            >
+              🧹 {isClearing ? 'Clearing...' : t.resetDbBtn}
+            </button>
+          </div>
         </div>
 
         {filteredUsers.length === 0 ? (
@@ -376,7 +333,7 @@ const Community: React.FC<CommunityProps> = ({
         ) : (
           <div className="space-y-3">
             {filteredUsers.map((u, idx) => {
-              const isMe = activeUser ? u.uid === activeUser.uid : false;
+              const isMe = reciterProfile ? u.uid === reciterProfile.uid : false;
               const appreciated = mashaallahCounts[u.uid] || 0;
 
               return (
@@ -390,17 +347,9 @@ const Community: React.FC<CommunityProps> = ({
                     <span className="text-xs font-black text-[#124559]/30 w-6 text-center">
                       #{idx + 1}
                     </span>
-                    {u.photoURL ? (
-                      <img 
-                        src={u.photoURL} 
-                        alt={u.displayName} 
-                        className="w-10 h-10 rounded-full object-cover border border-black/5"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-[#124559]/10 text-[#124559] flex items-center justify-center font-black text-sm">
-                        {(u.displayName || 'U')[0].toUpperCase()}
-                      </div>
-                    )}
+                    <div className="w-10 h-10 rounded-full bg-[#124559]/10 text-[#124559] flex items-center justify-center font-black text-sm">
+                      {(u.displayName || 'U')[0].toUpperCase()}
+                    </div>
                     <div>
                       <div className="flex items-center space-x-2">
                         <span className="font-bold text-[#124559] text-sm">

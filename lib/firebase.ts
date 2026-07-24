@@ -17,7 +17,9 @@ import {
   orderBy, 
   limit, 
   onSnapshot, 
-  serverTimestamp 
+  serverTimestamp,
+  getDocs,
+  writeBatch
 } from 'firebase/firestore';
 
 import firebaseConfig from '../firebase-applet-config.json';
@@ -140,6 +142,27 @@ export const subscribeToCommunityUsers = (callback: (users: UserProfile[]) => vo
   } catch (e) {
     console.error('Error setting up listener:', e);
     return () => {};
+  }
+};
+
+// Purge/reset community database records in Firestore
+export const clearAllCommunityDataFromFirestore = async () => {
+  try {
+    const usersSnap = await getDocs(collection(db, 'users'));
+    const batch = writeBatch(db);
+    usersSnap.forEach((d) => {
+      batch.delete(d.ref);
+    });
+    const logsSnap = await getDocs(collection(db, 'userLogs'));
+    logsSnap.forEach((d) => {
+      batch.delete(d.ref);
+    });
+    await batch.commit();
+    console.log("Community database wiped cleanly.");
+    return true;
+  } catch (e) {
+    console.error("Error clearing database:", e);
+    return false;
   }
 };
 

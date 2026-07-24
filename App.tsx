@@ -4,7 +4,7 @@ import { fetchDailyContent, LocalizedDailyContent } from './services/geminiServi
 import Counter from './components/Counter';
 import HistoryChart from './components/HistoryChart';
 import Community from './components/Community';
-import { auth, onAuthStateChanged, User, syncUserDataToFirestore, signInWithGoogle, logoutUser } from './lib/firebase';
+import { syncUserDataToFirestore } from './lib/firebase';
 
 const translations = {
   en: {
@@ -37,9 +37,9 @@ const translations = {
     refresh: "Refresh Content",
     reflection: "Reflection",
     settings: "Settings",
-    loginWithGoogle: "Sign in with Google",
-    signOut: "Sign Out",
-    account: "Account"
+    reciterProfileTitle: "Community Profile",
+    leaveCommunity: "Disconnect Profile",
+    account: "Community Account"
   },
   bn: {
     appName: "ইস্তিগফার ট্র্যাকার",
@@ -71,9 +71,9 @@ const translations = {
     refresh: "নতুন তথ্য",
     reflection: "প্রতিফলন",
     settings: "সেটিংস",
-    loginWithGoogle: "গুগল দিয়ে সাইন ইন করুন",
-    signOut: "সাইন আউট",
-    account: "অ্যাকাউন্ট"
+    reciterProfileTitle: "কমিউনিটি প্রোফাইল",
+    leaveCommunity: "ডিসকানেক্ট প্রোফাইল",
+    account: "কমিউনিটি অ্যাকাউন্ট"
   }
 };
 
@@ -92,20 +92,20 @@ const App: React.FC = () => {
     error: null
   });
 
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [guestUser, setGuestUser] = useState<{ uid: string; displayName: string; photoURL?: string } | null>(() => {
-    const saved = localStorage.getItem('istighfar_guest_user');
+  const [reciterProfile, setReciterProfile] = useState<{ uid: string; displayName: string } | null>(() => {
+    const saved = localStorage.getItem('istighfar_reciter_profile');
     return saved ? JSON.parse(saved) : null;
   });
 
-  const handleSetGuestUser = (guest: { uid: string; displayName: string; photoURL?: string } | null) => {
-    setGuestUser(guest);
-    if (guest) {
-      localStorage.setItem('istighfar_guest_user', JSON.stringify(guest));
+  const handleSetReciterProfile = (profile: { uid: string; displayName: string } | null) => {
+    setReciterProfile(profile);
+    if (profile) {
+      localStorage.setItem('istighfar_reciter_profile', JSON.stringify(profile));
     } else {
-      localStorage.removeItem('istighfar_guest_user');
+      localStorage.removeItem('istighfar_reciter_profile');
     }
   };
+
   const [showTargetModal, setShowTargetModal] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [targetInput, setTargetInput] = useState('');
@@ -116,14 +116,6 @@ const App: React.FC = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const getTodayStr = () => new Date().toISOString().split('T')[0];
   const t = translations[state.language];
-
-  // Subscribe to Firebase Auth State
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-    });
-    return () => unsubscribe();
-  }, []);
 
   // Handle Scroll Visibility for both Nav bars
   useEffect(() => {
@@ -236,10 +228,9 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, todayCount: newCount, logs: updatedLogs }));
     saveStateToLocal(updatedLogs, state.plannedTargets);
 
-    const activeUser = currentUser || guestUser;
-    if (activeUser) {
+    if (reciterProfile) {
       const tot = updatedLogs.reduce((acc, curr) => acc + curr.count, 0);
-      syncUserDataToFirestore(activeUser, newCount, tot, today);
+      syncUserDataToFirestore(reciterProfile, newCount, tot, today);
     }
   };
 
@@ -423,9 +414,8 @@ const App: React.FC = () => {
 
         {state.currentView === 'community' && (
           <Community 
-            currentUser={currentUser}
-            guestUser={guestUser}
-            onSetGuestUser={handleSetGuestUser}
+            reciterProfile={reciterProfile}
+            onSetReciterProfile={handleSetReciterProfile}
             language={state.language}
             todayCount={state.todayCount}
             totalCount={totalCount}
@@ -480,44 +470,37 @@ const App: React.FC = () => {
               {/* Account Section */}
               <div className="space-y-4 pt-2 border-t border-black/[0.04]">
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-[#124559] opacity-40">{t.account}</h4>
-                {currentUser ? (
+                {reciterProfile ? (
                   <div className="p-6 rounded-[2.5rem] bg-[#059669]/5 space-y-4">
                     <div className="flex items-center space-x-3">
-                      {currentUser.photoURL ? (
-                        <img src={currentUser.photoURL} alt={currentUser.displayName || ''} className="w-10 h-10 rounded-full object-cover" />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-[#124559] text-white flex items-center justify-center font-bold text-sm">
-                          {(currentUser.displayName || 'U')[0]}
-                        </div>
-                      )}
+                      <div className="w-10 h-10 rounded-full bg-[#124559] text-white flex items-center justify-center font-bold text-sm">
+                        {reciterProfile.displayName[0].toUpperCase()}
+                      </div>
                       <div className="overflow-hidden">
-                        <p className="text-xs font-bold text-[#124559] truncate">{currentUser.displayName || 'User'}</p>
-                        <p className="text-[10px] text-[#124559]/60 truncate">{currentUser.email}</p>
+                        <p className="text-xs font-bold text-[#124559] truncate">{reciterProfile.displayName}</p>
+                        <p className="text-[10px] text-[#059669] font-bold">Synced Live</p>
                       </div>
                     </div>
                     <button 
-                      onClick={() => { logoutUser(); setShowSidebar(false); }}
+                      onClick={() => { handleSetReciterProfile(null); setShowSidebar(false); }}
                       className="w-full py-3 rounded-2xl bg-red-50 text-red-600 font-black text-[10px] uppercase tracking-widest hover:bg-red-100 transition-colors"
                     >
-                      {t.signOut}
+                      {t.leaveCommunity}
                     </button>
                   </div>
                 ) : (
                   <div className="p-6 rounded-[2.5rem] bg-[#124559]/5 space-y-4">
                     <p className="text-xs font-medium text-[#124559]/80 leading-relaxed">
-                      Sign in with Google to view other reciters and sync your progress with Firebase database.
+                      Set a reciter name in the Community tab to feature your count on the global leaderboard in real-time.
                     </p>
                     <button 
-                      onClick={async () => {
-                        try {
-                          await signInWithGoogle();
-                          setShowSidebar(false);
-                          setState(prev => ({ ...prev, currentView: 'community' }));
-                        } catch (e) {}
+                      onClick={() => {
+                        setShowSidebar(false);
+                        setState(prev => ({ ...prev, currentView: 'community' }));
                       }}
-                      className="w-full py-4 rounded-2xl bg-[#124559] text-white font-black text-[10px] uppercase tracking-widest hover:bg-[#064e3b] transition-all shadow-md shadow-[#124559]/10"
+                      className="w-full py-4 rounded-2xl bg-[#059669] text-white font-black text-[10px] uppercase tracking-widest hover:bg-[#047857] transition-all shadow-md shadow-[#059669]/10"
                     >
-                      {t.loginWithGoogle}
+                      Open Community
                     </button>
                   </div>
                 )}
@@ -527,14 +510,14 @@ const App: React.FC = () => {
                  <div className="p-8 rounded-[3rem] bg-[#124559]/5 space-y-4">
                    <h4 className="text-[10px] font-black uppercase tracking-widest text-[#124559] opacity-40">Persistence</h4>
                    <p className="text-sm font-medium text-[#124559] leading-relaxed">
-                     {currentUser ? "Synced to Cloud Firestore Database" : "Saved locally in browser cache"}
+                     {reciterProfile ? "Synced to Cloud Firestore Database" : "Saved locally in browser cache"}
                    </p>
                  </div>
               </div>
 
               <div className="pt-10 border-t border-black/[0.03] space-y-3">
                 <p className="text-sm font-bold text-[#124559]">{t.madeBy}</p>
-                <p className="text-[10px] font-black uppercase tracking-widest opacity-20">Version 3.0 Cloud Edition</p>
+                <p className="text-[10px] font-black uppercase tracking-widest opacity-20">Version 3.0 Real-time Edition</p>
               </div>
             </div>
           </div>
