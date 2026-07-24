@@ -93,6 +93,19 @@ const App: React.FC = () => {
   });
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [guestUser, setGuestUser] = useState<{ uid: string; displayName: string; photoURL?: string } | null>(() => {
+    const saved = localStorage.getItem('istighfar_guest_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const handleSetGuestUser = (guest: { uid: string; displayName: string; photoURL?: string } | null) => {
+    setGuestUser(guest);
+    if (guest) {
+      localStorage.setItem('istighfar_guest_user', JSON.stringify(guest));
+    } else {
+      localStorage.removeItem('istighfar_guest_user');
+    }
+  };
   const [showTargetModal, setShowTargetModal] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [targetInput, setTargetInput] = useState('');
@@ -223,9 +236,10 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, todayCount: newCount, logs: updatedLogs }));
     saveStateToLocal(updatedLogs, state.plannedTargets);
 
-    if (currentUser) {
+    const activeUser = currentUser || guestUser;
+    if (activeUser) {
       const tot = updatedLogs.reduce((acc, curr) => acc + curr.count, 0);
-      syncUserDataToFirestore(currentUser, newCount, tot, today);
+      syncUserDataToFirestore(activeUser, newCount, tot, today);
     }
   };
 
@@ -410,6 +424,8 @@ const App: React.FC = () => {
         {state.currentView === 'community' && (
           <Community 
             currentUser={currentUser}
+            guestUser={guestUser}
+            onSetGuestUser={handleSetGuestUser}
             language={state.language}
             todayCount={state.todayCount}
             totalCount={totalCount}

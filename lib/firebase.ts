@@ -20,7 +20,6 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 
-// Import applet config
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -35,7 +34,15 @@ export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestore
   ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
   : getFirestore(app);
 
-// Auth helper functions
+export interface CustomUserProfile {
+  uid: string;
+  displayName: string;
+  email: string | null;
+  photoURL: string | null;
+  isGuest?: boolean;
+}
+
+// Auth helper function
 export const signInWithGoogle = async (): Promise<User> => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
@@ -78,20 +85,20 @@ export interface UserLog {
 
 // Sync user profile & today's count to Firestore
 export const syncUserDataToFirestore = async (
-  user: User,
+  user: { uid: string; displayName?: string | null; email?: string | null; photoURL?: string | null },
   todayCount: number,
   totalCount: number,
   todayDate: string
 ) => {
-  if (!user) return;
+  if (!user || !user.uid) return;
   try {
     const userRef = doc(db, 'users', user.uid);
     
     const profileData: Partial<UserProfile> = {
       uid: user.uid,
       displayName: user.displayName || 'Anonymous Reciter',
-      email: user.email,
-      photoURL: user.photoURL,
+      email: user.email || null,
+      photoURL: user.photoURL || null,
       todayCount,
       totalCount,
       lastActiveDate: todayDate,
@@ -105,7 +112,7 @@ export const syncUserDataToFirestore = async (
     await setDoc(logRef, {
       userId: user.uid,
       displayName: user.displayName || 'Anonymous Reciter',
-      photoURL: user.photoURL,
+      photoURL: user.photoURL || null,
       date: todayDate,
       count: todayCount,
       updatedAt: serverTimestamp()
@@ -116,7 +123,7 @@ export const syncUserDataToFirestore = async (
   }
 };
 
-// Listen to community users
+// Subscribe to community users snapshot (works for all users)
 export const subscribeToCommunityUsers = (callback: (users: UserProfile[]) => void) => {
   try {
     const usersQuery = query(collection(db, 'users'), orderBy('totalCount', 'desc'), limit(50));
