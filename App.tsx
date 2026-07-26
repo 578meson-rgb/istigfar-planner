@@ -117,30 +117,29 @@ const App: React.FC = () => {
   const getTodayStr = () => new Date().toISOString().split('T')[0];
   const t = translations[state.language];
 
-  // Handle Scroll Visibility for both Nav bars
+  // Handle Scroll Visibility for both Nav bars efficiently with requestAnimationFrame
   useEffect(() => {
+    let ticking = false;
     const handleScroll = () => {
-      const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
-      
-      // Top Header Visibility (only show at very top)
-      setIsHeaderVisible(window.scrollY < 20);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const scrollY = window.scrollY;
+          const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+          
+          const newHeaderVis = scrollY < 20;
+          const scrollPercentage = scrollHeight > 0 ? scrollY / scrollHeight : 0;
+          const newNavVis = scrollHeight > 0 && scrollPercentage >= 0.5;
 
-      if (scrollHeight <= 0) {
-        setIsNavVisible(false);
-        return;
-      }
-      
-      const scrollPercentage = window.scrollY / scrollHeight;
+          setIsHeaderVisible(prev => (prev !== newHeaderVis ? newHeaderVis : prev));
+          setIsNavVisible(prev => (prev !== newNavVis ? newNavVis : prev));
 
-      // Bottom Nav Visibility (50% / 50% rule)
-      if (scrollPercentage >= 0.5) {
-        setIsNavVisible(true);
-      } else {
-        setIsNavVisible(false);
+          ticking = false;
+        });
+        ticking = true;
       }
     };
 
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
     
     return () => window.removeEventListener('scroll', handleScroll);
@@ -288,10 +287,10 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#faf9f6] text-[#01161e] font-outfit selection:bg-[#059669]/10">
-      {/* Dynamic Background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-30">
-        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-[#7af0bb]/10 blur-[120px] rounded-full animate-pulse"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-[#598392]/10 blur-[150px] rounded-full animate-pulse" style={{ animationDelay: '2s' }}></div>
+      {/* Dynamic Lightweight Background */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-20">
+        <div className="absolute top-[-5%] left-[-5%] w-[40%] h-[40%] bg-[#7af0bb]/20 blur-[60px] rounded-full"></div>
+        <div className="absolute bottom-[-5%] right-[-5%] w-[40%] h-[40%] bg-[#598392]/20 blur-[60px] rounded-full"></div>
       </div>
 
       {/* Top Navigation - Auto hides on scroll */}

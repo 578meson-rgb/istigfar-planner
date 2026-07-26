@@ -85,43 +85,60 @@ export interface UserLog {
   updatedAt?: any;
 }
 
-// Sync user profile & today's count to Firestore
-export const syncUserDataToFirestore = async (
+// Debounce timer for Firestore syncing
+let syncDebounceTimer: any = null;
+
+// Sync user profile & today's count to Firestore (Debounced to prevent lag on fast clicks)
+export const syncUserDataToFirestore = (
   user: { uid: string; displayName?: string | null; email?: string | null; photoURL?: string | null },
   todayCount: number,
   totalCount: number,
-  todayDate: string
+  todayDate: string,
+  immediate: boolean = false
 ) => {
   if (!user || !user.uid) return;
-  try {
-    const userRef = doc(db, 'users', user.uid);
-    
-    const profileData: Partial<UserProfile> = {
-      uid: user.uid,
-      displayName: user.displayName || 'Anonymous Reciter',
-      email: user.email || null,
-      photoURL: user.photoURL || null,
-      todayCount,
-      totalCount,
-      lastActiveDate: todayDate,
-      updatedAt: serverTimestamp()
-    };
 
-    await setDoc(userRef, profileData, { merge: true });
+  const performSync = async () => {
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      
+      const profileData: Partial<UserProfile> = {
+        uid: user.uid,
+        displayName: user.displayName || 'Anonymous Reciter',
+        email: user.email || null,
+        photoURL: user.photoURL || null,
+        todayCount,
+        totalCount,
+        lastActiveDate: todayDate,
+        updatedAt: serverTimestamp()
+      };
 
-    // Also update log entry for today
-    const logRef = doc(db, 'userLogs', `${user.uid}_${todayDate}`);
-    await setDoc(logRef, {
-      userId: user.uid,
-      displayName: user.displayName || 'Anonymous Reciter',
-      photoURL: user.photoURL || null,
-      date: todayDate,
-      count: todayCount,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+      await setDoc(userRef, profileData, { merge: true });
 
-  } catch (e) {
-    console.error('Failed to sync data to Firestore:', e);
+      // Also update log entry for today
+      const logRef = doc(db, 'userLogs', `${user.uid}_${todayDate}`);
+      await setDoc(logRef, {
+        userId: user.uid,
+        displayName: user.displayName || 'Anonymous Reciter',
+        photoURL: user.photoURL || null,
+        date: todayDate,
+        count: todayCount,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+    } catch (e) {
+      console.error('Failed to sync data to Firestore:', e);
+    }
+  };
+
+  if (immediate) {
+    if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
+    performSync();
+  } else {
+    if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
+    syncDebounceTimer = setTimeout(() => {
+      performSync();
+    }, 600);
   }
 };
 

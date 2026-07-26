@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   subscribeToCommunityUsers, 
   UserProfile, 
@@ -149,26 +149,27 @@ const Community: React.FC<CommunityProps> = ({
   };
 
   // Deduplicate users by clean lowercase display name or UID so duplicate legacy rows never show up
-  const uniqueUsersMap = new Map<string, UserProfile>();
-  users.forEach(u => {
-    const key = (u.displayName || '').trim().toLowerCase();
-    if (!key) return;
-    const existing = uniqueUsersMap.get(key);
-    const isCurrentActive = reciterProfile && u.uid === reciterProfile.uid;
-    if (!existing || isCurrentActive || (u.totalCount || 0) > (existing.totalCount || 0)) {
-      uniqueUsersMap.set(key, u);
-    }
-  });
-
-  const deduplicatedUsers = Array.from(uniqueUsersMap.values()).sort((a, b) => (b.totalCount || 0) - (a.totalCount || 0));
+  const deduplicatedUsers = useMemo(() => {
+    const uniqueUsersMap = new Map<string, UserProfile>();
+    users.forEach(u => {
+      const key = (u.displayName || '').trim().toLowerCase();
+      if (!key) return;
+      const existing = uniqueUsersMap.get(key);
+      const isCurrentActive = reciterProfile && u.uid === reciterProfile.uid;
+      if (!existing || isCurrentActive || (u.totalCount || 0) > (existing.totalCount || 0)) {
+        uniqueUsersMap.set(key, u);
+      }
+    });
+    return Array.from(uniqueUsersMap.values()).sort((a, b) => (b.totalCount || 0) - (a.totalCount || 0));
+  }, [users, reciterProfile]);
 
   // Compute aggregate stats from real-time Firestore database
-  const aggregateGlobalTotal = deduplicatedUsers.reduce((acc, u) => acc + (u.totalCount || 0), 0);
-  const aggregateTodayTotal = deduplicatedUsers.reduce((acc, u) => acc + (u.todayCount || 0), 0);
+  const aggregateGlobalTotal = useMemo(() => deduplicatedUsers.reduce((acc, u) => acc + (u.totalCount || 0), 0), [deduplicatedUsers]);
+  const aggregateTodayTotal = useMemo(() => deduplicatedUsers.reduce((acc, u) => acc + (u.todayCount || 0), 0), [deduplicatedUsers]);
 
-  const filteredUsers = deduplicatedUsers.filter(u => 
+  const filteredUsers = useMemo(() => deduplicatedUsers.filter(u => 
     (u.displayName || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  ), [deduplicatedUsers, searchQuery]);
 
   return (
     <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-700">
