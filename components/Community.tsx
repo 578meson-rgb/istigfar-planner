@@ -16,6 +16,8 @@ interface CommunityProps {
   todayDate: string;
 }
 
+type Timeframe = 'today' | 'weekly' | 'allTime';
+
 const communityTranslations = {
   en: {
     title: "Community Database",
@@ -30,13 +32,16 @@ const communityTranslations = {
     globalTotal: "Global Istighfars",
     todayGlobal: "Today's Global Total",
     activeReciters: "Active Reciters",
-    reciterListTitle: "Top Reciters & Community Members",
+    reciterListTitle: "Reciter Leaderboard",
     searchPlaceholder: "Search reciter by name...",
     mashaAllah: "MashaAllah",
     syncedBadge: "Live Database Synced",
     noUsersFound: "No reciters found in database.",
     todayLabel: "Today",
     totalLabel: "Total",
+    tabToday: "⚡ Today's Leaderboard",
+    tabWeekly: "📅 Weekly",
+    tabAllTime: "🏆 All Time",
     resetDbBtn: "Clear Database & Start Fresh",
     confirmReset: "Are you sure you want to delete all entries and reset the community database to zero?"
   },
@@ -53,13 +58,16 @@ const communityTranslations = {
     globalTotal: "সর্বমোট গ্লোবাল ইস্তিগফার",
     todayGlobal: "আজকের গ্লোবাল মোট",
     activeReciters: "সক্রিয় সদস্য",
-    reciterListTitle: "শীর্ষ রেসিটার এবং কমিউনিটি সদস্যবৃন্দ",
+    reciterListTitle: "রেসিটার লিডারবোর্ড",
     searchPlaceholder: "নাম দিয়ে সদস্য খুঁজুন...",
     mashaAllah: "মাশাআল্লাহ",
     syncedBadge: "লাইভ ডাটাবেস সিঙ্কড",
     noUsersFound: "কোন সদস্য পাওয়া যায়নি।",
     todayLabel: "আজ",
     totalLabel: "মোট",
+    tabToday: "⚡ আজকের লিডারবোর্ড",
+    tabWeekly: "📅 সাপ্তাহিক",
+    tabAllTime: "🏆 সর্বমোট",
     resetDbBtn: "ডাটাবেস সম্পূর্ণ রিসেট করুন",
     confirmReset: "আপনি কি নিশ্চিত যে সকল পুরাতন এন্ট্রি মুছে ফেলে ডাটাবেস নতুন করে শুরু করতে চান?"
   }
@@ -78,6 +86,7 @@ const Community: React.FC<CommunityProps> = ({
   const [nameInput, setNameInput] = useState('');
   const [isEditingName, setIsEditingName] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [timeframe, setTimeframe] = useState<Timeframe>('today');
   const [mashaallahCounts, setMashaallahCounts] = useState<{ [uid: string]: number }>({});
 
   const t = communityTranslations[language];
@@ -148,7 +157,7 @@ const Community: React.FC<CommunityProps> = ({
     if ('vibrate' in navigator) navigator.vibrate(15);
   };
 
-  // Deduplicate users by clean lowercase display name or UID so duplicate legacy rows never show up
+  // Deduplicate users by clean lowercase display name or UID, then sort based on selected timeframe
   const deduplicatedUsers = useMemo(() => {
     const uniqueUsersMap = new Map<string, UserProfile>();
     users.forEach(u => {
@@ -156,16 +165,34 @@ const Community: React.FC<CommunityProps> = ({
       if (!key) return;
       const existing = uniqueUsersMap.get(key);
       const isCurrentActive = reciterProfile && u.uid === reciterProfile.uid;
-      if (!existing || isCurrentActive || (u.totalCount || 0) > (existing.totalCount || 0)) {
+      const uActiveToday = u.lastActiveDate === todayDate ? (u.todayCount || 0) : 0;
+      const exActiveToday = existing ? (existing.lastActiveDate === todayDate ? (existing.todayCount || 0) : 0) : -1;
+
+      if (!existing || isCurrentActive || uActiveToday > exActiveToday || (u.totalCount || 0) > (existing.totalCount || 0)) {
         uniqueUsersMap.set(key, u);
       }
     });
-    return Array.from(uniqueUsersMap.values()).sort((a, b) => (b.totalCount || 0) - (a.totalCount || 0));
-  }, [users, reciterProfile]);
+
+    const userList = Array.from(uniqueUsersMap.values());
+
+    if (timeframe === 'today') {
+      return userList.sort((a, b) => {
+        const aToday = a.lastActiveDate === todayDate ? (a.todayCount || 0) : 0;
+        const bToday = b.lastActiveDate === todayDate ? (b.todayCount || 0) : 0;
+        if (bToday !== aToday) return bToday - aToday;
+        return (b.totalCount || 0) - (a.totalCount || 0);
+      });
+    } else {
+      // 'weekly' or 'allTime' - sort by totalCount descending
+      return userList.sort((a, b) => (b.totalCount || 0) - (a.totalCount || 0));
+    }
+  }, [users, reciterProfile, timeframe, todayDate]);
 
   // Compute aggregate stats from real-time Firestore database
   const aggregateGlobalTotal = useMemo(() => deduplicatedUsers.reduce((acc, u) => acc + (u.totalCount || 0), 0), [deduplicatedUsers]);
-  const aggregateTodayTotal = useMemo(() => deduplicatedUsers.reduce((acc, u) => acc + (u.todayCount || 0), 0), [deduplicatedUsers]);
+  const aggregateTodayTotal = useMemo(() => deduplicatedUsers.reduce((acc, u) => 
+    acc + (u.lastActiveDate === todayDate ? (u.todayCount || 0) : 0), 0
+  ), [deduplicatedUsers, todayDate]);
 
   const filteredUsers = useMemo(() => deduplicatedUsers.filter(u => 
     (u.displayName || '').toLowerCase().includes(searchQuery.toLowerCase())
@@ -302,7 +329,7 @@ const Community: React.FC<CommunityProps> = ({
         </div>
       )}
 
-      {/* Reciters Directory */}
+      {/* Reciters Directory & Leaderboard */}
       <div className="space-y-4 pt-2">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
           <h3 className="text-xl font-black text-[#124559] tracking-tight">
@@ -327,6 +354,40 @@ const Community: React.FC<CommunityProps> = ({
           </div>
         </div>
 
+        {/* Leaderboard Timeframe Tabs */}
+        <div className="flex items-center space-x-2 bg-gray-200/60 p-1.5 rounded-2xl w-fit">
+          <button
+            onClick={() => setTimeframe('today')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+              timeframe === 'today'
+                ? 'bg-[#059669] text-white shadow-md'
+                : 'text-[#124559]/70 hover:text-[#124559]'
+            }`}
+          >
+            {t.tabToday}
+          </button>
+          <button
+            onClick={() => setTimeframe('weekly')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+              timeframe === 'weekly'
+                ? 'bg-[#059669] text-white shadow-md'
+                : 'text-[#124559]/70 hover:text-[#124559]'
+            }`}
+          >
+            {t.tabWeekly}
+          </button>
+          <button
+            onClick={() => setTimeframe('allTime')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+              timeframe === 'allTime'
+                ? 'bg-[#059669] text-white shadow-md'
+                : 'text-[#124559]/70 hover:text-[#124559]'
+            }`}
+          >
+            {t.tabAllTime}
+          </button>
+        </div>
+
         {filteredUsers.length === 0 ? (
           <div className="p-10 rounded-[2.5rem] bg-white border border-black/[0.04] text-center text-xs text-[#124559]/50">
             {t.noUsersFound}
@@ -336,6 +397,13 @@ const Community: React.FC<CommunityProps> = ({
             {filteredUsers.map((u, idx) => {
               const isMe = reciterProfile ? u.uid === reciterProfile.uid : false;
               const appreciated = mashaallahCounts[u.uid] || 0;
+              const activeToday = u.lastActiveDate === todayDate ? (u.todayCount || 0) : 0;
+
+              // Rank badge
+              let rankBadge = `#${idx + 1}`;
+              if (idx === 0) rankBadge = '🥇';
+              else if (idx === 1) rankBadge = '🥈';
+              else if (idx === 2) rankBadge = '🥉';
 
               return (
                 <div 
@@ -345,10 +413,10 @@ const Community: React.FC<CommunityProps> = ({
                   }`}
                 >
                   <div className="flex items-center space-x-4">
-                    <span className="text-xs font-black text-[#124559]/30 w-6 text-center">
-                      #{idx + 1}
+                    <span className="text-base font-black text-[#124559] w-8 text-center shrink-0">
+                      {rankBadge}
                     </span>
-                    <div className="w-10 h-10 rounded-full bg-[#124559]/10 text-[#124559] flex items-center justify-center font-black text-sm">
+                    <div className="w-10 h-10 rounded-full bg-[#124559]/10 text-[#124559] flex items-center justify-center font-black text-sm shrink-0">
                       {(u.displayName || 'U')[0].toUpperCase()}
                     </div>
                     <div>
@@ -370,8 +438,8 @@ const Community: React.FC<CommunityProps> = ({
 
                   <div className="flex items-center justify-between sm:justify-end space-x-6 pt-2 sm:pt-0 border-t sm:border-t-0 border-black/[0.03]">
                     <div className="text-right">
-                      <span className="text-lg font-black text-[#059669] block leading-none">
-                        {u.todayCount || 0}
+                      <span className={`text-lg font-black block leading-none ${timeframe === 'today' ? 'text-[#059669]' : 'text-[#124559]/60'}`}>
+                        {activeToday}
                       </span>
                       <span className="text-[9px] font-bold uppercase tracking-wider text-[#124559]/40">
                         {t.todayLabel}
@@ -379,8 +447,8 @@ const Community: React.FC<CommunityProps> = ({
                     </div>
 
                     <div className="text-right">
-                      <span className="text-lg font-black text-[#124559] block leading-none">
-                        {u.totalCount || 0}
+                      <span className={`text-lg font-black block leading-none ${timeframe !== 'today' ? 'text-[#059669]' : 'text-[#124559]'}`}>
+                        {(u.totalCount || 0).toLocaleString()}
                       </span>
                       <span className="text-[9px] font-bold uppercase tracking-wider text-[#124559]/40">
                         {t.totalLabel}
